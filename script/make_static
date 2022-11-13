@@ -1,0 +1,9 @@
+mkdir dist
+rm -Rf dist/static
+mkdir dist/static
+cp src/index_static.html dist/static/index.html
+cp src/icon.png dist/static/icon.png
+echo Linking worker files...
+node script/packworker.js
+echo Making bundles...
+npx webpack --stats-error-details
