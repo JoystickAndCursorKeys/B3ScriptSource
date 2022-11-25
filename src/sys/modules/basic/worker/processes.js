@@ -27,12 +27,28 @@ class processes {
 
 	register( obj ) {
 
+		var newId = this.processes.length-1;
+
+		this.processes[newId] = obj;
+		obj.processId = newId;
+
+		return newId;
+	}
+
+	get( id ) {
+		return this.processes[ id ];
+	}
+
+	register( obj ) {
+
 		var newId = this.processes.length;
 
 		this.processes.push( obj );
 
+		obj.processId = newId;
 		return newId;
 	}
+
 
 	getRoot() {
 

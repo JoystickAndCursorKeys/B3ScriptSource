@@ -13,6 +13,7 @@ class KERNALMODULE {
     var htmlwrapper = sys.m.htmlwrapper;
     var display = sys.m.displaymodes;
 
+
     this.out = con;
 
     if( sys.staticTarget ) {
@@ -32,10 +33,24 @@ class KERNALMODULE {
             w: con.getColumCount(),
             h: con.getRowCount()
           }
-       );
+      );
+
+      var hasPixels = con.hasPixels();
+      var bWH = [-1,-1];
+      if( hasPixels ) {
+         bWH = con.getBitmapDimensions();
+      }
+
+      this.worker.postMessage(
+           {
+             type: "initbitmap",
+             w: bWH[ 0 ],
+             h: bWH[ 1 ]
+           }
+      );
     }
 
-
+    var _parent = this;
     this.worker.onmessage = function(e) {
 
         var m = e.data.message;
@@ -83,6 +98,28 @@ class KERNALMODULE {
           display.setMode( m.m );
           con = display.getDriver();
           sys.out =  con;
+
+          var wh = con.getDimensions();
+          var hasPixels = con.hasPixels();
+          var bWH = [-1,-1];
+
+          if( hasPixels ) {
+            bWH = con.getBitmapDimensions();
+          }
+          this.postMessage(
+            {
+            type: "message",
+            processId: m.processId,
+            message: "displaysize",
+            messageObject:
+              {
+
+                textW: wh[0], textH: wh[1],
+                bitmapW: bWH[0], bitmapH: bWH[1],
+              }
+            }
+            );
+
         }
         else if( t == "textupdate" ) {
 
@@ -105,8 +142,27 @@ class KERNALMODULE {
 
           sys.out.updateAll( properties, m.cells );
         }
+        else if ( t == "gfxupdate" ) {
+          sys.out.gfxUpdate( m );
+        }
+        else if ( t == "export" ) {
+          var callback = {
+            clazz: _parent,
+            method: "nullHandler",
+            data: ""
+          }
+          sys.m.qfs.saveFile("transfer://myprogram.bas", m.code, callback);
+        }
+        else if ( t == "nativeout" ) {
+          sys.out.native( m );
+        }
+
 
       }
+  }
+
+  nullHandler( data )  {
+    console.log( "nullhandler " + data );
   }
 
   loadApp( url0 ) {

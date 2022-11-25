@@ -16,20 +16,29 @@
 
   <script type="text/basic" id="autorun1.bas">
 
+    5 dim cc(5): cc(0)=4: cc(1) = 15: cc(2)= 6: cc(3)= 14: cc(4)= 1
+    20 w=1024: h=768: ss=0 : w2 = w/2: h2 = h/2 : w3 = (w-w2)/2
+    25 c=0 : x = w2 : tm=0
+    30 for s = 10 to 200 step 15: x=x*5  : if x>w3 then x=w2
+    35 gcolor cc(c): c=c+1: if c>4 then c=0
+    40 for a = 0 to 6.28 step 2/(s*6.28)
+    50 sr = sin(ss+a*9) * s/2
+    60 r=s+sr: plot sin(a)*r + x + sin(tm)*.5, cos(a)*r+ h2
+    65 tm = tm + .1
+    70 next: ss=ss+.1: tm=0: next
 
-    10 print "hi"
-
-   </script>
+     </script>
 
 
   <script type="text/basic" id="autorun2.bas">
 
-    0 rem color -1,0 : cls
+    0  color 0,0 : cls
     10 for t = 0 to 15
     20 color 15-t,t
     30 print " " ; t ; " ";
     40 next
-    50 print
+    50 print : color 0,0
+    60 print "hello world"
 
    </script>
 
@@ -42,7 +51,7 @@
     40 print: print : center "Press space to plaY"
     50 get a$ : if a$ <> " " then goto 50
     55 locate 20,x : print me$
-    60 locate 29, int( rnd(1) * 79 ) : print "W"
+    60 locate 43, int( rnd(1) * 79 ) : print "W"
     65 for t = 1 to 1000 : next
     70 get a$
     71 if a$ = "x" then x=x+1
@@ -52,7 +61,7 @@
   </script>
 
 
-  <script type="text/basic" id="autorun.sbas">
+  <script type="text/basic" id="autorun.bas">
 
   0 color 1,0: cls
   1 gv$ = uc$("2502"): gh$ = uc$("2500"); uc$("2500"); uc$("2500") : gc$ = uc$("253c")

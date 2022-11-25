@@ -1,15 +1,3 @@
-/*
-	TODOS
-
-		1. flush smaller changes
-		2. logging from browser, how?
-				- browser to taconfig and then to ??
-
-		3.
-
-
-*/
-
 class TextArea {
 
 	constructor( sys ) {
@@ -33,6 +21,10 @@ class TextArea {
 		this.initialized = false;
 
 		this.changes = { all: false, list: [] };
+	}
+
+	reInit( w, h ) {
+		this._int_initMode( w, h );
 	}
 
 
@@ -60,6 +52,26 @@ class TextArea {
 				}
 				return;
 			}
+
+			var clist = this.changes.list;
+			if( clist.length > 0 ) {
+				var lc = clist[ clist.length -1 ];
+				var nc = area;
+				if( lc.y1 == lc.y2 && nc.y1 == nc.y2 && lc.y1 == nc.y1) {
+					if( nc.x1 == lc.x2 +1 ) {
+							var x2 = lc.x2;
+							var temp=1;
+							var changesTargetArray = lc.cells[0];
+							for( var i=0; i<area.cells[0].length; i++) {
+								var cell = area.cells[0][i];
+								changesTargetArray.push( cell );
+							}
+							lc.x2 = nc.x2;
+							return;
+					}
+				}
+			}
+
 		 	this.changes.list.push( area );
 
 	 }
@@ -137,6 +149,8 @@ class TextArea {
 			}
 
 		}
+
+
 
 		attach( w, h ) {
 			this._int_initMode( w, h);
@@ -287,7 +301,9 @@ class TextArea {
 			if( this.y >= this.rows ) {
 				this.__int_scrollDown();
 				this.y = this.rows -1;
+				return { scroll: true }
 			}
+			return { scroll: false }
 
 	}
 
@@ -297,7 +313,10 @@ class TextArea {
 				var c = str.substr(i,1);
 				this.__int_write_direct_ch( c );
 			}
-			this.__int_nl();
+			var stat = this.__int_nl();
+			if( stat.scroll ) {
+					this._int_addChangeAll();
+			}
 			this._int_flush();
 	}
 
@@ -365,8 +384,10 @@ class TextArea {
 		this.x++;
 		if( this.x >= this.cols ) {
 			this.x = 0;
-			this.__int_nl();
-			this._int_addChangeAll();
+			var stat = this.__int_nl();
+			if( stat.scroll ) {
+				this._int_addChangeAll();
+			}
 			return;
 		}
 
@@ -378,7 +399,11 @@ class TextArea {
 	writec( chr ) {
 
 		if( chr == "\n" ) {
-			this.__int_nl();
+			var stat = this.__int_nl();
+			if( stat.scroll ) {
+					this._int_addChangeAll();
+			}
+
 			return;
 		}
 		this.__int_write_direct_ch( chr );

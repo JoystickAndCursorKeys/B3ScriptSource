@@ -1,10 +1,11 @@
 class BasicCommands {
 
-  constructor( context ) {
-    this.output = context.output;
-    this.input = context.input;
-    this.context = context;
-    this.sys = context.sys;
+  constructor( runtime ) {
+    this.output = runtime.output;
+    this.bitmap = runtime.bitmap;
+    this.input = runtime.input;
+    this.runtime = runtime;
+    this.sys = runtime.sys;
     this.cmds = {};
     this.func = {};
     this.statementList = null;
@@ -57,7 +58,7 @@ class BasicCommands {
 
   /************************ commands ************************/
   _stat_new( pars ) {
-    this.context.new();
+    this.runtime.new();
   }
 
   _stat_list( pars ) {
@@ -97,9 +98,9 @@ class BasicCommands {
       start = parts[0].data;
     }
 
-    var context = this.context;
+    var runtime = this.runtime;
     var list = [];
-    for (const l of context.program)
+    for (const l of runtime.program)
       {
 
         var lineNr = parseInt(l[0]);
@@ -108,7 +109,7 @@ class BasicCommands {
         }
       }
 
-      this.context.enterListMode( list );
+      this.runtime.enterListMode( list );
   }
 
   _if_get() {
@@ -142,15 +143,15 @@ class BasicCommands {
       this.erh.throwError( "not a var", "parameter 0" );
     }
 
-    var data = this.context.readData();
+    var data = this.runtime.readData();
     if( data === undefined ) { this.erh.throwError( "out of data" ); }
     else {
       if( data.type =="num" ) {
-        this.context.setVar(
+        this.runtime.setVar(
           p0.value, parseInt( data.data ) );
         }
         else {
-          this.context.setVar(
+          this.runtime.setVar(
             p0.value,  data.data );
         }
       }
@@ -164,9 +165,9 @@ class BasicCommands {
     }
 
     var k = this.input.getKey();
-    if( k == null ) { this.context.setVar(p0.value, ""); }
+    if( k == null ) { this.runtime.setVar(p0.value, ""); }
     else {
-      this.context.setVar(p0.value, k.key );
+      this.runtime.setVar(p0.value, k.key );
     }
   }
 
@@ -202,61 +203,61 @@ class BasicCommands {
       }
     }
 
-    this.context.startConsoleDataInput( vars );
+    this.runtime.startConsoleDataInput( vars );
 
   }
 
   _stat_restore( pars ) {
-    this.context.restoreDataPtr();
+    this.runtime.restoreDataPtr();
   }
 
   _stat_load( pars ) {
-    var context = this.context;
+    var runtime = this.runtime;
     var result;
 
-    context.printLine("");
+    runtime.printLine("");
 
     if( pars.length == 0) {
-      context.printLine("searching");
+      runtime.printLine("searching");
     }
     else {
-      context.printLine("searching for " + pars[0].value);
+      runtime.printLine("searching for " + pars[0].value);
     }
 
     if( pars.length == 0) {
-        result = context.load( false );
+        result = runtime.load( false );
     }
     else {
-      result = context.load( pars[0].value );
+      result = runtime.load( pars[0].value );
     }
 
     if( !result ) {
-      context.printLine("?not found error");
+      runtime.printLine("?not found error");
     }
     else  {
 
       if( !result[1] ) {  //only print when not a snapshot
 
         if( pars.length == 0) {
-          context.printLine("found default");
+          runtime.printLine("found default");
         }
         else {
-          context.printLine("found "+pars[0].value);
+          runtime.printLine("found "+pars[0].value);
         }
-        context.printLine("loading");
+        runtime.printLine("loading");
       }
 
     }
   }
 
   _stat_save( pars ) {
-    var context = this.context;
+    var runtime = this.runtime;
 
     if( pars.length == 0) {
-        context.save( false );
+        runtime.save( false );
     }
     else {
-      context.save( pars[0].value );
+      runtime.save( pars[0].value );
     }
   }
 
@@ -273,9 +274,9 @@ class BasicCommands {
   }
 
   _stat_run( pars ) {
-    var context = this.context;
+    var runtime = this.runtime;
 
-    context.runPGM();
+    runtime.runPGM();
   }
 
   _if_print() {
@@ -298,7 +299,7 @@ class BasicCommands {
 
   _stat_print( pars ) {
 
-    var context = this.context;
+    var runtime = this.runtime;
     var con= this.output;
 
     if( pars.length == 0 ) {
@@ -342,7 +343,7 @@ class BasicCommands {
           exparts2.parts.push( exparts.parts[j] );
         }
       }
-      value = context.evalExpression( exparts2 );
+      value = runtime.evalExpression( exparts2 );
 
       if( i == 0) {
         con.write( this.normalizeIfNumber( value ) );
@@ -358,7 +359,7 @@ class BasicCommands {
 
 
   _stat_clr( pars ) {
-    return this.context.clrPGM();
+    return this.runtime.clrPGM();
   }
 
   /************************ functions ************************/
@@ -402,21 +403,57 @@ class BasicCommands {
     return this.randnrs[ this.randIndex ];
   }
 
-  intSeedRand( x ) {
-    var base = Math.floor( x * 11 );
-    this.randIndex= base % this.randnrs.length;
-    this.randStep = 1+(base % 7);
+  intSeedRand( x0 ) {
+
+    if( x0 < 0) {
+      var x = -x0;
+      var base = Math.floor( x * 11 );
+      this.randIndex= base % this.randnrs.length;
+      this.randStep = 1+(base % 7);
+
+      /* Also reseed random buffer */
+      this.randnrs = [];
+      for(var i=0; i<10000;i++) {
+        this.randnrs.push( Math.random() );
+      }
+    }
+    else {
+
+      const minute = 1000 * 60;
+      const hour = minute * 60;
+      const day = hour * 24;
+      const year = day * 365;
+
+      const d = new Date();
+      let seedModifier = Math.round(d.getTime() / year);
+
+      x = -x;
+      var base = Math.floor( seedModifier * 11 );
+      this.randIndex= base % this.randnrs.length;
+      this.randStep = 1+(base % 7);
+
+      /* Also reseed random buffer */
+      this.randnrs = [];
+      for(var i=0; i<10000;i++) {
+        this.randnrs.push( Math.random() );
+      }
+    }
+
   }
 
 
   _fun_rnd( pars ) {
 
-    if( pars.length <1) {
-      this.erh.throwError( "syntax", "missing parameter 0" );
+    if( pars.length >1) {
+      this.erh.throwError( "syntax", "rnd takes one parameter" );
     }
 
-    if( pars[0].value < 0) {
-      this.intSeedRand( -pars[0].value );
+    if( pars.length == 1) {
+
+      if( pars[0].value == 0 ) {
+        return Math.random();
+      }
+      this.intSeedRand( pars[0].value );
     }
 
     return this.intGetNextRand();
@@ -431,7 +468,7 @@ class BasicCommands {
   }
 
   _fun_pos( pars ) {
-    return this.context.getLinePos();
+    return this.runtime.getLinePos();
   }
 
   _fun_left_DLR_( pars ) {
@@ -511,7 +548,7 @@ class BasicCommands {
   }
 
   _fun_tab( pars ) {
-    var context = this.context;
+    var runtime = this.runtime;
 
     if( pars.length <1) {
       this.erh.throwError( "syntax", "missing parameter 0" );
@@ -538,6 +575,6 @@ class BasicCommands {
 
 
   _fun_jiffies( pars ) {
-    return this.context.getJiffyTime( );
+    return this.runtime.getJiffyTime( );
   }
 }

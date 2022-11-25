@@ -9,6 +9,9 @@ class COMMONBOOTLOADER {
     sys.init = {};
     sys.staticTarget = staticFlag;
 
+    sys.domContainer = document.createElement("div");
+    document.body.appendChild( sys.domContainer );
+
     sys.SIG = "boss64";
     sys.VERSION = "0.1";
     sys.CODENAME = "Papa Smurf";
@@ -125,9 +128,9 @@ class COMMONBOOTLOADER {
       console.error.apply(console, args);
     }
 
-    boot.logerr = sys.logerr;
-    boot.logwarn = sys.logwarn;
-    boot.log = sys.log;
+    this.logerr = sys.logerr;
+    this.logwarn = sys.logwarn;
+    this.log = sys.log;
 
     if( !this.bootDebug ) {
       sys.rawlog = sys.rawlogcon;

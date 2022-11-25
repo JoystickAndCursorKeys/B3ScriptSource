@@ -1,8 +1,9 @@
 class Input {
 
-  constructor() {
+  constructor( sys ) {
     this.keyPress = [];
     this.interactive = false;
+    this.sys = sys;
   }
 
   setHandler( hc ) {
@@ -10,7 +11,10 @@ class Input {
   }
 
   setInterActive( flag ) {
+
     this.interactive = flag;
+    this.sys.blinkMode( flag  );
+    
   }
 
   inputKeyHandler( e )  {

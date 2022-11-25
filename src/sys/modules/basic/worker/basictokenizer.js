@@ -48,6 +48,7 @@ class Tokenizer {
 			this.tokens = [];
 			this.reader = reader;
 			this.keywords = keywords;
+			this.greedy = false;
 	}
 
 	isOpChar( ctx ) {
@@ -84,26 +85,23 @@ class Tokenizer {
 			ctx.endFound = true;
 		}
 
-		if( this.keywords.indexOf( ctx.seq ) >-1 ) {
-			//console.log("Found Keyword: " + ctx.seq );
-			ctx.endFound = true;
-		}
-		else if( ! (ctx.seq === undefined )) {
-			var trappedKW = false;
-			var trapped = null;
-			for( var i=0; i<this.keywords.length; i++) {
-				var kw = this.keywords[i];
-				if( ctx.seq.indexOf( kw ) > 0 )  {
-					trappedKW = true;
-					trapped = kw;
-					//console.log( "trapped-------------" );
-					//console.log( kw );
-					//console.log( ctx.seq );
-					//console.log( ctx );
-					return [rv, kw.length ];
-				}
+		if( this.greedy ) {
+			if( this.keywords.indexOf( ctx.seq.toUpperCase() ) >-1 ) {
+				ctx.endFound = true;
 			}
+			else if( ! (ctx.seq === undefined )) {
+				var trappedKW = false;
+				var trapped = null;
+				for( var i=0; i<this.keywords.length; i++) {
+					var kw = this.keywords[i];
+					if( ctx.seq.toUpperCase().indexOf( kw ) > 0 )  {
+						trappedKW = true;
+						trapped = kw;
+						return [rv, kw.length ];
+					}
+				}
 
+			}
 		}
 		return [rv,0];
 	}
@@ -116,6 +114,7 @@ class Tokenizer {
 			if( ctx.c == " " || ctx.c == "\t" || ctx.c == "\n" || ctx.c == "\r") {
 				return [true,0];
 			}
+
 			return [false,0];
 	}
 
@@ -252,6 +251,14 @@ class Tokenizer {
 				var rv = this[rule[FUNCIX]]( ctx );
 				if( rv[0] ) {
 						var tok = this.readChars( read, rule[TYPEIX], rule[FUNCIX], rule[STRINGTYPEIX] );
+
+						if( tok.type == "name") {
+							tok.data = tok.data.toUpperCase();
+						}
+
+						if( tok.type == "trash") {
+							tok.detail = "'" + tok.data + "' (ASCII-code=" + tok.data.charCodeAt(0) + ")";
+						}
 
 						tokens.push( tok );
 						tokenFound = true;

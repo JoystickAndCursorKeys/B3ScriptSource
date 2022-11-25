@@ -331,7 +331,7 @@ class Parser {
 					//all ok, next par
 				}
 				else {
-					this.throwError( context, "expected comma or ), got "+token.type + " " + token.data);
+					this.throwError( context, "Expected ',' or ')', got '" + token.data + "'");
 				}
 			}
 			even = !even;
@@ -357,7 +357,7 @@ class Parser {
 		var token = context.tokens.shift();
 
 		if( !(token.type == "bracket" && token.data == "(")) {
-			this.throwError( context, "parsing subexpression, expected bracket, not " + token.type + " - " + token.data);
+			this.throwError( context, "parsing subexpression, expected \"bracket\", not '" + token.data + "'");
 		}
 
 		var endTokens = [];
@@ -378,17 +378,18 @@ class Parser {
         str = str + "'" + token.type + "'";
     }
     else {
-      str = str + "'" + token.type + "/" + token.data + "'";
+      //str = str + "'" + token.type + "/" + token.data + "'";
+      str = str + "'" + token.data + "'";
     }
 
     return str;
   }
 
-  endTokensToString( endTokenArry )  {
+  endTokensToString( endTokenArray )  {
     var str = "";
 
-    for( var et=0; et<endTokenArry.length; et++) {
-      var endToken = endTokenArry[et];
+    for( var et=0; et<endTokenArray.length; et++) {
+      var endToken = endTokenArray[et];
 
       if( str != "") { str+= " ";}
       str += this.tokensToString( endToken );
@@ -455,7 +456,7 @@ class Parser {
         endLoop = context.tokens.length == 0;
       }
       if( !endLoop ) {
-        this.throwError( context, "empty simple expression end expected");
+        this.throwError( context, "Empty simple expression end expected");
       }
     }
 
@@ -697,7 +698,7 @@ class Parser {
           continue;
         }
 				else {
-					this.throwError( context, "expected number, string, symbol or bracket, not " + token.data);
+					this.throwError( context, "Expected \"number\", \"string\", \"symbol\" or \"bracket\", not " + token.data);
 				}
         op = null;
 			}
@@ -707,9 +708,9 @@ class Parser {
 					op = token.data;
 				}
 				else {
-					this.throwError( context, "expected operator or "+
+					this.throwError( context, "Expected \"operator\" or one of ("+
           this.endTokensToString(endTokens)+
-          ", not " + token.type + " " + token.data);
+          "), not '" + token.data + "'");
 				}
 			}
 			even = !even;
@@ -885,26 +886,9 @@ class Parser {
 
         }
         else {
-          this.throwError( context, "let, unexpected token " + token.type );
+          this.throwError( context, "Unexpected data after 'LET': '" + token.data + "'" );
         }
 
-/*parseAssignment( context, preTokens, commands, command, nameToken, token0  ) {
-parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  ) {
-
-
-        if( token.type != "eq") {
-          this.throwError( context, "LET expects =");
-        }
-
-        var cmdType = "assignment";
-        command.type = cmdType;
-        command.var = nameToken;
-
-        var endTokens = [];
-        endTokens.push( { type: "cmdsep", data: "@@@all" });
-
-        command.expression = this.parseBoolExpression( context, endTokens );
-        commands.push( command );*/
       }
       else if( controlToken == "DIM") {
 
@@ -1019,13 +1003,25 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
         }
 
         if( token.type != "num") {
-          this.throwError( context, "GOTO/GOSUB expects number", "undef'd statement");
+          //this.throwError( context, "GOTO/GOSUB expects number", "undef'd statement");
+
+          tokens.unshift( token );
+
+          var endTokens = [];
+          endTokens.push( { type: "cmdsep", data: "@@@all" });
+
+          var expression = this.parseBoolExpression( context, endTokens );
+          command.params=[];
+          command.params[0] = expression;
+          commands.push( command );
+          return;
+
         }
         num = parseInt(token.data);
         token = tokens.shift();
         if( token !== undefined ) {
           if( token.type != "cmdsep") {
-            this.throwError( context, "expected cmdsep, instead of "+token.type+"/"+token.data);
+            this.throwError( context, "Expected \"command separator\", instead of '"+token.data+"'");
           }
         }
 
@@ -1154,7 +1150,7 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
           }
           else {
             if(! ( token.type == "cmdsep" && token.data == ":")) {
-              throw "FOR unexpected token " + token.type + "/" + token.data;
+              throw "FOR: unexpected token '" + token.data +"'";
             }
           }
         }
@@ -1187,7 +1183,7 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
           }
 
           if( token.type != "name" ) {
-            throw "next expected var or nothing";
+            throw "Next expected variable, not '" +token.data+ "'";
           }
 
           var nextcommand = {
@@ -1208,7 +1204,7 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
             break;
           }
           if( !( token.type == "sep" && token.data == "," )) {
-            throw "expected comma, found " + token.type + "/"+token.data;
+            throw "Expected comma, found '" + token.data + "'";
           }
         }
 
@@ -1275,7 +1271,7 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
 
 
             if( expr1 === undefined ) {
-              throw "data expected data";
+              throw "DATA: expected data";
             }
 
             dataArray.push( expr1 );
@@ -1358,7 +1354,7 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
             continue;
           }
           else {
-            this.throwError( context, "unexpected chars in statement call: '" + token.data +"'");
+            this.throwError( context, "Unexpected characters in statement call: '" + token.data +"'");
           }
         }
         else {
@@ -1402,7 +1398,12 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
 			}
 
 			if( token.type != "name" ) {
-				this.throwError( context, "Unexpected token, expected symbolname, got " + token.type + "/" + token.name) ;
+				if( token.type != "trash" ) {
+          this.throwError( context, "Unexpected token, expected symbolname, got '" + oken.data +"'") ;
+        }
+        else {
+          this.throwError( context, "Unexpected character, expected \"symbolname\", got " + token.detail ) ;
+        }
 			}
 
 			var nameToken = token.data;
@@ -1443,7 +1444,7 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
       else {
           if( !keyword ) {
             console.log("Dump: ",context, preTokens, commands, command, nameToken, token);
-            this.throwError( context, "statement without keyword");
+            this.throwError( context, "no such statement: " + nameToken );
           }
           this.parseStatementCall( context, preTokens, commands, command, nameToken, token );
 
@@ -1485,18 +1486,18 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
 
     var errContext, detail, lineNr=-1;
     try {
-      errContext="TOKENIZER";
-      detail="INIT";
+      errContext="tokenizer";
+      detail="init";
   		var toker = new Tokenizer( new StringReader ( line ), this.KEYWORDS );
 
-      detail="PARSING TOKENS";
+      detail="parsing tokens";
       var tokens = toker.tokenize();
       if( this.debugFlag ) {
         console.log("Tokens after tokenizer");
       }
       this.logTokens( tokens );
 
-      detail="INTERNAL";
+      detail="internal";
       tokens = this.upperCaseNameTokens( tokens );
       tokens = this.removePadding( tokens );
       tokens = this.mergeCompTokens( tokens );
@@ -1523,8 +1524,8 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
         lineNumber: lineRecord.lineNumber
       }
 
-      errContext = "PARSER";
-      detail="PARSING COMMANDS";
+      errContext = "parser";
+      detail="parsing commands";
       var commands = this.parseLineCommands( context );
       lineRecord.commands = commands;
       lineRecord.raw = line;
@@ -1540,7 +1541,7 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
         }
         throw e;
       }
-      this.throwError( null, errContext + ": " + detail );
+      this.throwError( null, errContext + " error (" +e+ ") while " + detail );
     }
   }
 

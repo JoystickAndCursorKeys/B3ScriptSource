@@ -1,11 +1,12 @@
 class ExtendedCommands {
 
-  constructor( context ) {
-    this.output = context.output;
-    this.html = context.html;
-    this.input = context.input;
-    this.context = context;
-    this.sys = context.sys;
+  constructor( runtime ) {
+    this.output = runtime.output;
+    this.bitmap = runtime.bitmap;
+    this.html = runtime.html;
+    this.input = runtime.input;
+    this.runtime = runtime;
+    this.sys = runtime.sys;
     this.cmds = {};
     this.func = {};
     this.statementList = null;
@@ -65,6 +66,58 @@ class ExtendedCommands {
     this.output.control( 64 + reverse );
   }
 
+
+  _stat_gcolor( pars ) {
+
+    var result;
+
+    if( pars.length != 1) {
+      this.erh.throwError( "parameter count", "expected color" );
+      return
+    }
+
+    if( pars.length == 1) {
+        var col = pars[0].value;
+        this.bitmap.setLineColor( col );
+        return
+    }
+
+  }
+
+
+  _stat_line( pars ) {
+    if( pars.length != 4 ) {
+      this.erh.throwError( "parameter count", "expected 2 (x0,y0,y1,y1), not " + pars.length );
+      return;
+    }
+
+    if( !this.bitmap.isActive() ) {
+      this.erh.throwError( "invalid display mode", "current mode cannot show graphics" );
+      return;
+    }
+
+    this.bitmap.line(
+      pars[0].value,
+      pars[1].value,
+      pars[2].value,
+      pars[3].value
+
+    );
+  }
+
+  _stat_plot( pars ) {
+    if( pars.length != 2 ) {
+      this.erh.throwError( "parameter count", "expected 2 (x,y), not " + pars.length );
+      return;
+    }
+
+    if( !this.bitmap.isActive() ) {
+      this.erh.throwError( "invalid display mode", "current mode cannot show graphics" );
+      return;
+    }
+
+    this.bitmap.plot( pars[0].value, pars[1].value );
+  }
 
   _stat_center( pars ) {
 
@@ -156,7 +209,7 @@ class ExtendedCommands {
           exparts2.parts.push( exparts.parts[j] );
         }
       }
-      value = this.context.evalExpression( exparts2 );
+      value = this.runtime.evalExpression( exparts2 );
 
       if( i == handleIx ) {
         htmlHandle =  value;
@@ -216,7 +269,6 @@ class ExtendedCommands {
 
   }
 
-
   _stat_display( pars ) {
 
     var result;
@@ -230,7 +282,9 @@ class ExtendedCommands {
     }
 
     var mode = pars[0].value;
-    this.sys.setDisplayMode( mode   );
+    this.sys.setDisplayMode( this.runtime, mode   );
+    this.runtime.startWaitForMessage( "displaysize" )
+
 
   }
 
@@ -244,12 +298,21 @@ class ExtendedCommands {
     }
 
     if( pars.length > 1) {
-        this.erh.throwError( "too many variables", "expected one parameter only" );
+        this.erh.throwError( "too many parameters", "expected one parameter only" );
     }
 
     var bcol = pars[0].value;
     this.output.control( 18, bcol );
 
+  }
+
+  _stat_export( pars ) {
+    if( pars.length > 0) {
+        this.erh.throwError( "too many parameters", "export needs no parameters" );
+    }
+
+    var code = this.runtime.getProgramAsText();
+    this.sys.export( code );
   }
 
   _fun_uc_DLR_( pars ) {
@@ -278,5 +341,55 @@ class ExtendedCommands {
       this.html.get();
   }
 
+
+  _fun_width( pars ) {
+
+    if( pars.length != 0 ) {
+        this.erh.throwError( "too many parameters", "width() has no parameters" );
+    }
+
+    var wh = this.bitmap.getDimensions();
+    return wh[0];
+  }
+
+  _fun_height( pars ) {
+
+    if( pars.length != 0 ) {
+        this.erh.throwError( "too many parameters", "width() has no parameters" );
+    }
+
+    var wh = this.bitmap.getDimensions();
+    return wh[0];
+  }
+
+  _fun_cols( pars ) {
+
+    if( pars.length != 0 ) {
+        this.erh.throwError( "too many parameters", "cols() has no parameters" );
+    }
+
+    var wh = this.output.getDimensions();
+    return wh[0];
+  }
+
+  _fun_columns( pars ) {
+
+    if( pars.length != 0 ) {
+        this.erh.throwError( "too many parameters", "columns() has no parameters" );
+    }
+
+    var wh = this.output.getDimensions();
+    return wh[0];
+  }
+
+  _fun_rows( pars ) {
+
+    if( pars.length != 0 ) {
+        this.erh.throwError( "too many parameters", "rows() has no parameters" );
+    }
+
+    var wh = this.output.getDimensions();
+    return wh[1];
+  }
 
 }

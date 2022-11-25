@@ -38,13 +38,15 @@ function init_sys() {
   }
 
 
-  sys.setDisplayMode = function( m ){
-    post( "displaymode", { m:m } );
+  sys.setDisplayMode = function( rt, m ){
+    post( "displaymode", { processId: rt.processId, m:m } );
   }
 
   sys.blinkMode = function( m ){
     post( "blinkMode", { m:m } );
   }
+
+
 
 
   sys.html = {}
@@ -70,14 +72,19 @@ function init_sys() {
 
   }
 
+  sys.export = function( code ) {
+    post( "export", { code: code } );
+  }
+
 }
 
 function start_sys() {
   sys.log("Starting wsys");
 
   sys.processes = new processes( sys );
-  sys.input = new Input();
+  sys.input = new Input( sys );
   sys.out = new TextArea( sys );
+  sys.bout = new BitMap( sys );
 
   /* APPLICATION */
 
@@ -92,6 +99,14 @@ function start_sys() {
           sys.input.inputKeyHandler( data );
 
         }
+        else if( data.type == "message") {
+          var id = data.processId;
+          var runtime = sys.processes.get( id );
+
+          runtime.receiveMessage( data.message, data.messageObject );
+
+          //TODO, index of runtime.
+        }
         else if( data.type == "loadpgm" ) {
 
           sys.log("Received 'loadpgm' message. Loaded " + data.pgmData.length + " bytes.." );
@@ -100,14 +115,19 @@ function start_sys() {
           var runtime = new BasicRuntime( sys, editor );
           sys.log("Context created, parsing program");
 
-          runtime.importPGMHandler( data.pgmData, data.QPath  );
+          var ok = runtime.bootPGM( data.pgmData, data.QPath  );
           sys.log("Parsed program => RUN");
 
-          runtime.runPGM();
-          sys.log("Program started...");
+          if( ok ) {
+            runtime.runPGM();
+            sys.log("Program started...");
+          }
+          else {
+            runtime.stop();
+          }
 
-          sys.processes.register( runtime );
-          sys.log("Basic program registered as process.");
+          var id = sys.processes.register( runtime );
+          sys.log("Basic program registered as process " + id + ".");
 
           pgmman.addRuntime( runtime );
 
@@ -117,6 +137,12 @@ function start_sys() {
 
           sys.log( "init with: " + JSON.stringify( data ) )
           sys.out.attach( data.w, data.h );
+
+        }
+        else if( data.type == "initbitmap" ) {
+
+          sys.log( "init with: " + JSON.stringify( data ) )
+          sys.bout.attach( data.w, data.h );
 
         }
         else {

@@ -2,7 +2,7 @@ class KERNALMODULE {
 
 	constructor( sys ) {
 		this.initialized = false;
-		this.default = 3;
+		this.default = 100;
 
 		this.sys = sys;
 		this.drivers = [];

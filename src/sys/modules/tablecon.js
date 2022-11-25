@@ -9,13 +9,14 @@ class KERNALMODULE {
 		this.y = 0;
 		this.hidden = false;
 		this.blinking = true;
+		this.reverse = false;
 
 		this.outColors ={};
 
 		this.fontSizeInt = 18;
 		this.fontSizeCSS = this.fontSizeInt + "px";
 		this.fontFamily = "monospace";
-		this.reverse = false;
+
 
 		this.colors = [
 			"#000000",
@@ -40,7 +41,6 @@ class KERNALMODULE {
 		this.outColors.txtBgColor= this.colors[0];
 		this.outColors.txtColor = this.colors[5];
 
-		this.initialized = false;
 	}
 
 
@@ -58,8 +58,6 @@ class KERNALMODULE {
 				clearInterval ( this.blinkInterval );
 				this.blinkInterval = undefined;
 			}
-
-			this.initialized = false;
 		}
 
 		init() {
@@ -254,8 +252,16 @@ class KERNALMODULE {
 			 this.sys.log("TBCON Ready.");
 	}
 
+	native( operation ) {
+		throw "@Operation " + operation.action + " not supported on TABLECON";
+	}
+
 	blinkMode( mode ) {
 		this.blinking = mode;
+	}
+
+	hasPixels() {
+		return false;
 	}
 
 	_int_updateArea( srccells, x0, y0, x1, y1 ) {
@@ -435,7 +441,7 @@ class KERNALMODULE {
 	writeln( str ) {
 			this._int_blinkOff();
 			this.show();
-			console.log( "writeln" + str );
+			//console.log( "writeln" + str );
 
 			for( var i=0; i<str.length; i++) {
 				var c = str.substr(i,1);

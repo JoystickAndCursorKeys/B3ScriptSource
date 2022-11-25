@@ -1,7 +1,7 @@
 const staticLoading = false;
 
 import  BootSys   from        './bootsys.js';
-boot = new BootSys( staticLoading );
+var boot = new BootSys( staticLoading );
 var sys = boot.getSys();
 
 
@@ -274,8 +274,12 @@ var scripturl = {
   name: "SCRIPTURL Device", url: "scripturl.js",  destination: "script"
 };
 
+var transferfs = {
+  name: "TRANSFER Device", url: "transferfs.js",  destination: "transfer"
+};
+
 var qfs = {
-  name: "QFS Device", url: "qfs.js",  destination: "qfs", dependencies: [ "ramfs", "lfs", "sfs", "script" ]
+  name: "QFS Device", url: "qfs.js",  destination: "qfs", dependencies: [ "ramfs", "lfs", "sfs", "script", "transfer" ]
 };
 
 var mutedinput = {
@@ -314,6 +318,7 @@ boot.sequence = [
     lfs,
     sfs,
     ramfs,
+    transferfs,
     scripturl,
     qfs,//
     htmlwrapper,

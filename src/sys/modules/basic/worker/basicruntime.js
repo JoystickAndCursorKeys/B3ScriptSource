@@ -6,8 +6,10 @@ class BasicRuntime {
     this.sys = sys;
     this.editor = editor;
     this.editor.addRunTime( this );
+    this.listSpeed = 15;
 
     this.output = sys.out;
+    this.bitmap = sys.bout;
     this.input = sys.input;
     this.input.setHandler( this );
     this.input.setInterActive( false);
@@ -17,7 +19,6 @@ class BasicRuntime {
     this.runFlag = false;
     this.waitForMessageFlag = false;
     this.waitForMessageVariable = null;
-    this.message = null;
     this.executeLineFlag = false;
     this.goPlayExampleFlag = false;
     this.breakCycleFlag;
@@ -28,8 +29,8 @@ class BasicRuntime {
     this.nullTime = new Date().getTime();
 
     this.turboMode = false;
-    this.cmdCountPerCycleDefault = 1;
-    this.cmdCountPerCycleTurbo = 1000;
+    this.cmdCountPerCycleDefault = 10000;
+    this.cmdCountPerCycleTurbo = 20000;
     this.cmdCountPerCycle = this.cmdCountPerCycleDefault ;
 
     //var ctx = this.outtext;
@@ -65,7 +66,7 @@ class BasicRuntime {
         clearScreen: { clazz: this, method: "cbClearScreen" }
     }
 
-    this.setTurbo( true );
+    //this.setTurbo( true );
     this.synchClock( );
     this.exitMode = "stay";
 
@@ -132,39 +133,70 @@ class BasicRuntime {
     this.waitForMessageVariable = variable;
   }
 
-  receiveMessage( _message ) {
-    this.message = _message;
+  receiveMessage( _message, _data ) {
+
     this.vars[ this.waitForMessageVariable ] = _message;
     this.waitForMessageFlag = false;
+
+    if( _message == "displaysize" ) {
+        this.output.reInit( _data.textW, _data.textH );
+        this.output.reInit( _data.bitmapW, _data.bitmapH );
+
+        if( this.runFlag == false ) {
+            this.printReady();
+        }
+    }
   }
 
   stop() {
-    this.runStop();
+    if( this.runFlag ) {
+      this.runStop();
+    }
+    if( this.listFlag ) {
+      this.listStop();
+    }
   }
 
-  interactiveKeyHandler( kbEvent ) {
+  interactiveKeyHandler( e ) {
 
     if( this.runFlag == true ) {
-      if( kbEvent.keyLabel == "Enter" ) {
+      if( e.keyLabel == "Enter" ) {
 
         this.output.writeln("");
         this.handleLineInput( this.lineInput, true );
+        this.lineInput = "";
+      }
+      else if( e.keyLabel == "Backspace" ||
+              e.keyLabel == "Delete"  ) {
+        var x = this.output.getCursorPos()[0];
+        if( x>0) {
+            if( this.lineInput.length > 0 ) {
+                this.output.backspace();
+                this.lineInput = this.lineInput.substr(0,this.lineInput.length-1)
+            }
 
+        }
+      }
+      else if( e.keyLabel == "ArrowLeft" ) {
+        this.output.cursorMove("left");
+      }
+      else if( e.keyLabel == "ArrowRight" ) {
+        this.output.cursorMove("right");
       }
       else {
-        if( kbEvent.key != null ) {
-          this.lineInput += kbEvent.key;
-          this.output.write( kbEvent.key );
+        if( e.key != null ) {
+          this.lineInput += e.key;
+          this.output.write( e.key );
         }
       }
     }
     else {
-      this.editor.interactiveKeyHandler( kbEvent );
+      this.editor.interactiveKeyHandler( e );
     }
   }
 
   HandleStopped() {
-    this.sys.blinkMode( true  );
+
     this.input.setInterActive( true);
   }
 
@@ -176,7 +208,32 @@ class BasicRuntime {
     this.sys.log( "imported program " + filename +" with " + content.length + " bytes ");
   }
 
-  exportPGM() {
+  bootPGM( content, filename ) {
+    try {
+      var pgm = this.textLinesToBas( content.split("\n") );
+      this.fileName = filename;
+
+      this.program = pgm;
+      this.setProgram( pgm );
+
+      this.sys.log( "imported program " + filename +" with " + content.length + " bytes ");
+      return true;
+    }
+    catch ( e ) {
+      var tmp = 1;
+
+      var pgm = this.textLinesToBas( "" );
+      this.program = pgm;
+      this.HandleStopped();
+      this.printError("parsing syntax", false, e.lineNr, e.detail );
+      this.printReady();
+      return false;
+
+    }
+  }
+
+
+/*  exportPGM() {
     var exportName = "program.bas";
     if( this.fileName ) {
       exportName = this.fileName;
@@ -185,6 +242,7 @@ class BasicRuntime {
     var text = this.getProgramAsText();
     this.DESKTOP.requestDownload( text, exportName );
   }
+*/
 
   exitProgram() {
     this.closeWindow( this.windowId );
@@ -195,6 +253,7 @@ class BasicRuntime {
     this.listFlag = true;
     this.list = list;
     this.listPointer = 0;
+    this.input.setInterActive( false );
   }
 
   setExitMode( v ) {
@@ -218,12 +277,10 @@ class BasicRuntime {
     if( on ) {
       this.cmdCountPerCycle = this.cmdCountPerCycleTurbo ;
       this.turboMode = true;
-      this.cursorCountMax = this.cursorCountMaxTurbo;
       return;
     }
     this.cmdCountPerCycle = this.cmdCountPerCycleDefault ;
     this.turboMode = false;
-      this.cursorCountMax = this.cursorCountMaxNormal;
   }
 
   setProgram( pgm ) {
@@ -350,19 +407,22 @@ class BasicRuntime {
    return results;
   }
 
-  printError( s, supressLine, explicitline ) {
+  printError( s, supressLine, explicitline, detail ) {
 
+    var line1 = ("?" + s + " error" + this.onLineStr());
 
     if( explicitline ) {
-        this.output.writeln( ("?" + s + " error in " + explicitline ).toUpperCase() );
-        return;
+        line1 = ( ("?" + s + " error in " + explicitline ) );
     }
     if( supressLine ) {
 
-        this.output.write( ("?" + s + " error").toUpperCase() );
-        return;
+        line1 = ( ("?" + s + " error") );
     }
-    this.output.writeln(  ("?" + s + " error" + this.onLineStr()).toUpperCase() );
+
+    this.output.writeln(  line1 );
+    if( detail ) {
+      this.output.writeln(  ">> " + detail );
+    }
 
   }
 
@@ -644,9 +704,6 @@ class BasicRuntime {
       if( p.data == "." ) {
         val = 0;
       }
-      else if( p.data == "~" ) {
-        val = Math.PI;
-      }
       else if((""+p.data).indexOf(".") >= 0) {
         val = parseFloat(p.data);
       }
@@ -668,6 +725,15 @@ class BasicRuntime {
             this.padZeros2(val[2]);
         }
       }
+      else if(p.data == "CURRENTLINE") {
+        val = this.runPointer;
+        if( val != -1 ) {
+          val = parseInt( this.program[ val ][0] );
+        }
+      }
+      else if(p.data == "PI") {
+        val = Math.PI;
+      }
       else {
         val = this.vars[ p.data ];
       }
@@ -680,11 +746,11 @@ class BasicRuntime {
       var arr = this.vars[ varIntName ];
 
       if( arr === undefined ) {
-        throw "@no such array";
+        throw "@no such array@Array '"+ varIntName+"' does not exist";
       }
 
       if( arr.getIndexCount() != p.indices.length ) {
-          throw "@bad subscript";
+          throw "@bad subscript@Array index dimensions do not match";
       }
 
       var indices = [];
@@ -724,7 +790,7 @@ class BasicRuntime {
 
             stc = ecommands[ nFunName ];
 
-            this.printError("no such function " + p.functionName);
+            this.printError("no such function: " + p.functionName);
             console.log("Cannot find functionName " + nFunName );
 
             throw "@no such function " + p.functionName;
@@ -862,7 +928,7 @@ class BasicRuntime {
       }
 
       else {
-        throw "@unknown op '"+p.op+"'";
+        throw "@syntax@unknown operator '"+p.op+"'";
       }
     }
 
@@ -962,7 +1028,9 @@ class BasicRuntime {
 
     try {
 
-
+      if( this.bitmap.isActive() ) {
+        this.bitmap.triggerFlush();
+      }
 
       if( !this.runFlag ||
             this.inputFlag ||
@@ -970,23 +1038,15 @@ class BasicRuntime {
              ) {
 
         if( this.listFlag ) {
-           if( this.listPointer < this.list.length ) {
+           var countdown = this.listSpeed;
+           while( this.listPointer < this.list.length && countdown-- > 0 ) {
                this.listCodeLine( this.list[ this.listPointer ] );
                this.listPointer++;
            }
-           else {
-             this.listFlag = false;
-             this.printLine("ready.");
+           if (  this.listPointer >= this.list.length ){
+             this.listStop();
            }
 
-        }
-        if(this.cursorCount++>this.cursorCountMax) {
-          this.cursorCount = 0;
-
-          if( !this.listFlag )
-            {
-              c.blinkCursor();
-            }
         }
       }
       else {
@@ -1088,7 +1148,7 @@ class BasicRuntime {
 
       if( this.erh.isSerializedError( e ) ) {
         var err = this.erh.fromSerializedError( e );
-        this.printError( err.clazz );
+        this.printError( err.clazz, undefined, undefined, err.detail );
       }
       else {
         this.printError("unexpected");
@@ -1145,12 +1205,20 @@ class BasicRuntime {
     this.goto( line );
   }
 
-  goto( line ) {
+  goto( line0 ) {
 
     //console.log( "goto line " + line)
     var pgm = this.program;
     var len=this.program.length;
     var found = false;
+    var line;
+
+    if( (typeof line0) == "number" ) {
+        line = line0;
+    }
+    else {
+        line = this.evalExpression( line0 );
+    }
 
     for( var i=0; i<len; i++) {
       var l = pgm[i];
@@ -1176,10 +1244,11 @@ class BasicRuntime {
     if( this.listFlag ) {
       var c = this.output;
       this.listFlag = false;
-      c.clearCursor();
+      this.HandleStopped();
       this.printLine( "ready.");
     }
   }
+
 
   runStop() {
     if( this.runFlag ) {
@@ -1225,7 +1294,7 @@ class BasicRuntime {
   listCodeLine( rawLine ) {
 
     var inString = false;
-    for( var i=0; i<rawLine.length; i++ ) {
+/*    for( var i=0; i<rawLine.length; i++ ) {
 
       var c = rawLine.charAt(i);
 
@@ -1234,8 +1303,8 @@ class BasicRuntime {
       if( c == "\"" ) {
         inString = !inString;
       }
-    }
-    this.printLine( "" );
+    }*/
+    this.printLine( rawLine );
 
   }
 
@@ -1502,11 +1571,13 @@ class BasicRuntime {
 
     this.executeLineFlag = false;
 
+
     if( this.startAsGoto ) {
         this.startAsGoto = false;
 
         var bak1 = this.runPointer;
         var bak2 = this.runPointer2;
+
 
         this.runPGM();
 
@@ -1517,6 +1588,7 @@ class BasicRuntime {
         return;
     }
 
+    this.input.setInterActive( false);
 
     var c = this.output;
     var p = this.program;
@@ -1555,6 +1627,14 @@ class BasicRuntime {
       this.runPointer = 0;
       this.runPointer2 = 0;
     }
+    else {
+      this.runFlag = false;
+      this.inputFlag = false;
+      this.runPointer = 0;
+      this.runPointer2 = 0;
+      this.input.setInterActive( true);
+      this.printReady();
+    }
   }
 
 
@@ -1586,11 +1666,11 @@ class BasicRuntime {
     if( ctxv.jumpTo.cmdPointer >= cmdArrayLen )  {
 
       if( this.runPointer == -1) {
-        throw "@Cannot find command after for";
+        throw "@syntax@Can't find command after 'FOR'";
       }
       else {
         if( ( this.runPointer + 1) >= linePointersLen ) {
-          throw "@cannot find command after for, on next line";
+          throw "@syntax@Can't find command after 'FOR', on next line";
         }
         ctxv.jumpTo.line++;
         ctxv.jumpTo.cmdPointer = 0;
@@ -1602,7 +1682,7 @@ class BasicRuntime {
   doForNext( nextVarName ) {
     var ctx = this.forContext;
     if( ctx.default.length == 0 ) {
-      throw "@next without for";
+      throw "@syntax@Next without for";
     }
     var varName = ctx.default[ctx.default.length-1];
     if( nextVarName  != null ) {
@@ -1967,7 +2047,7 @@ class BasicRuntime {
           else if( ! cmd.var.endsWith("$") ) {
               var v = this.evalExpression( cmd.expression );
               if( ! (typeof v == "number") ) {
-                this.printError("type mismatch");
+                this.printError("type mismatch", undefined, undefined, "value not a number");
                 return [END_W_ERROR,i+1,cnt];
               }
               arr.set( indices, this.evalExpression( cmd.expression ) );
@@ -1991,7 +2071,7 @@ class BasicRuntime {
           else if( ! cmd.var.endsWith("$") ) {
               var v = this.evalExpression( cmd.expression );
               if( ! (typeof v == "number") ) {
-                this.printError("type mismatch");
+                this.printError("type mismatch", undefined, undefined, "value not a number");
                 return [END_W_ERROR,i+1,cnt];
               }
               this.vars[ cmd.var ] = this.evalExpression( cmd.expression );
@@ -2218,7 +2298,7 @@ class BasicRuntime {
       this.parseLineNumber = -1;
       if( this.erh.isError( e ) ) {
         this.parseLineNumber = e.lineNr;
-        this.printError( e.clazz, true );
+        this.printError( e.clazz, true, undefined, e.detail );
       }
       else {
         this.printError( "syntax", true );
@@ -2256,7 +2336,7 @@ class BasicRuntime {
         if( this.erh.isSerializedError( e ) ) {
           var err = this.erh.fromSerializedError( e );
           this.parseLineNumber = err.lineNr;
-          this.printError( err.clazz );
+          this.printError( err.clazz, undefined, undefined, err.detail );
         }
         else if( this.erh.isError( e ) ) {
           var err = e;

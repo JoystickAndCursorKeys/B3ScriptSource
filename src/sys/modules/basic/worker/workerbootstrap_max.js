@@ -21,7 +21,8 @@ try {
   sys.log("Init RWBuffers");
 
   importScripts(
-    "../../rwbuffers/worker/textarea.js"
+    "../../rwbuffers/worker/textarea.js",
+    "../../rwbuffers/worker/bitmap.js"
   );
 }
 catch ( e ) {

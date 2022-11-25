@@ -59,6 +59,8 @@ class KERNALMODULE {
         }
       }
 
+      event.preventDefault();
+      
       if( handler ) {
         handler[ prefix + "KeyHandler" ]( kEvent );
       } else {
