@@ -13,7 +13,6 @@ class KERNALMODULE {
     var htmlwrapper = sys.m.htmlwrapper;
     var display = sys.m.displaymodes;
 
-
     this.out = con;
 
     if( sys.staticTarget ) {
@@ -26,29 +25,29 @@ class KERNALMODULE {
       else {
         this.worker = new Worker( "sys/modules/basic/worker/workerbootstrap_max.js"   );
       }
-
-      this.worker.postMessage(
-          {
-            type: "inittxtarea",
-            w: con.getColumCount(),
-            h: con.getRowCount()
-          }
-      );
-
-      var hasPixels = con.hasPixels();
-      var bWH = [-1,-1];
-      if( hasPixels ) {
-         bWH = con.getBitmapDimensions();
-      }
-
-      this.worker.postMessage(
-           {
-             type: "initbitmap",
-             w: bWH[ 0 ],
-             h: bWH[ 1 ]
-           }
-      );
     }
+
+    this.worker.postMessage(
+        {
+          type: "inittxtarea",
+          w: con.getColumCount(),
+          h: con.getRowCount()
+        }
+    );
+
+    var hasPixels = con.hasPixels();
+    var bWH = [-1,-1];
+    if( hasPixels ) {
+       bWH = con.getBitmapDimensions();
+    }
+
+    this.worker.postMessage(
+         {
+           type: "initbitmap",
+           w: bWH[ 0 ],
+           h: bWH[ 1 ]
+         }
+    );
 
     var _parent = this;
     this.worker.onmessage = function(e) {

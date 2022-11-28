@@ -5,13 +5,17 @@ mkdir dist/static
 cp src/index_static.html dist/static/index.html
 cp src/icon.png dist/static/icon.png
 
-#rm -Rf dist/static_embed
-#mkdir dist/static_embed
+rm -Rf dist/static_embed
+mkdir dist/static_embed
 #cp src/index_static_embed.html dist/static_embed/index.html
-#cp src/icon.png dist/static_embed/icon.png
+cp src/icon.png dist/static_embed/icon.png
 
 echo Linking worker files...
 node script/packworker.js
 
 echo Making bundles...
 npx webpack --stats-error-details
+
+
+echo Now making embedded
+node script/packbloburl.js

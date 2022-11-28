@@ -8,6 +8,8 @@
           "sys.js",
           "basicarray.js",   "basicerrorhandler.js",   "editor.js",  "basicruntime.js",    "extendedcommands.js",  "pgmmanager.js",
           "basiccommands.js",  "basicparser.js",  "basictokenizer.js",  "input.js",  "processes.js",
+          "../../rwbuffers/worker/textarea.js",
+          "../../rwbuffers/worker/bitmap.js",
           "workerbootstrap_static.js"
         ]
     }]

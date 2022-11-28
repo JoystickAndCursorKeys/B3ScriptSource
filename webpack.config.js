@@ -9,7 +9,7 @@ module.exports = {
   devtool: 'source-map',
   output: {
     filename: 'basic[name].js',
-    path: path.resolve(__dirname, 'dist/static'),
+    path: path.resolve( __dirname, 'dist/static'),
   },
   plugins: [
   ]

@@ -1,6 +1,7 @@
 //src/sys/modules/basic/worker/sys.js
 //src/sys/modules/basic/worker/basicarray.js
 //src/sys/modules/basic/worker/basicerrorhandler.js
+//src/sys/modules/basic/worker/editor.js
 //src/sys/modules/basic/worker/basicruntime.js
 //src/sys/modules/basic/worker/extendedcommands.js
 //src/sys/modules/basic/worker/pgmmanager.js
@@ -9,7 +10,9 @@
 //src/sys/modules/basic/worker/basictokenizer.js
 //src/sys/modules/basic/worker/input.js
 //src/sys/modules/basic/worker/processes.js
-//src/sys/modules/basic/worker/workerwrapper_static.js
+//src/sys/modules/basic/worker/../../rwbuffers/worker/textarea.js
+//src/sys/modules/basic/worker/../../rwbuffers/worker/bitmap.js
+//src/sys/modules/basic/worker/workerbootstrap_static.js
 // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
 
 // ## sys.js ==========---------- 
@@ -29,9 +32,13 @@ console = sys;
 
 function init_sys() {
 
+
+
   function post( type, message ) {
     postMessage( { type: type, message: message } );
   }
+
+  sys.post = post;
 
   sys.log = function() {
 
@@ -52,39 +59,16 @@ function init_sys() {
 
   }
 
-  sys.out = {}
-  sys.out.write = function() {
 
-      var args = Array.prototype.slice.call(arguments);
-      post( "write",args );
-
+  sys.setDisplayMode = function( rt, m ){
+    post( "displaymode", { processId: rt.processId, m:m } );
   }
 
-  sys.out.writeln = function() {
-
-      var args = Array.prototype.slice.call(arguments);
-      post( "writeln",args );
-
+  sys.blinkMode = function( m ){
+    post( "blinkMode", { m:m } );
   }
 
-  sys.out.writec = function( c ) {
 
-      post( "writec", c );
-  }
-
-  sys.out.control = function( c ) {
-      post( "control", c  );
-
-  }
-
-  sys.out.control2 = function( c, d ) {
-      post( "control2", { c:c, d:d } );
-
-  }
-
-  sys.out.nl = function() {
-      post( "writec", "\n" );
-  }
 
 
   sys.html = {}
@@ -110,13 +94,19 @@ function init_sys() {
 
   }
 
+  sys.export = function( code ) {
+    post( "export", { code: code } );
+  }
+
 }
 
 function start_sys() {
-  sys.log("Starting a bworker-wrapper");
+  sys.log("Starting wsys");
 
   sys.processes = new processes( sys );
-  sys.input = new Input();
+  sys.input = new Input( sys );
+  sys.out = new TextArea( sys );
+  sys.bout = new BitMap( sys );
 
   /* APPLICATION */
 
@@ -126,42 +116,55 @@ function start_sys() {
       try {
         var data = obj.data;
 
-        if( data.type == "loadpgm" ) {
+        if( data.type == "keydown" ) {
+
+          sys.input.inputKeyHandler( data );
+
+        }
+        else if( data.type == "message") {
+          var id = data.processId;
+          var runtime = sys.processes.get( id );
+
+          runtime.receiveMessage( data.message, data.messageObject );
+
+          //TODO, index of runtime.
+        }
+        else if( data.type == "loadpgm" ) {
 
           sys.log("Received 'loadpgm' message. Loaded " + data.pgmData.length + " bytes.." );
 
-          var runtime = new BasicRuntime( sys );
+          var editor = new Editor( sys );
+          var runtime = new BasicRuntime( sys, editor );
           sys.log("Context created, parsing program");
 
-          runtime.importPGMHandler( data.pgmData, data.QPath  );
+          var ok = runtime.bootPGM( data.pgmData, data.QPath  );
           sys.log("Parsed program => RUN");
 
-          runtime.runPGM();
-          sys.log("Program started...");
+          if( ok ) {
+            runtime.runPGM();
+            sys.log("Program started...");
+          }
+          else {
+            runtime.stop();
+          }
 
-          sys.processes.register( runtime );
-          sys.log("Basic program registered as process.");
+          var id = sys.processes.register( runtime );
+          sys.log("Basic program registered as process " + id + ".");
 
           pgmman.addRuntime( runtime );
 
 
         }
-        else if( data.type == "keydown" ) {
+        else if( data.type == "inittxtarea" ) {
 
-          //sys.log("Received 'kbevent' message. " +  JSON.stringify( data ) );
-          var stop = false;
+          sys.log( "init with: " + JSON.stringify( data ) )
+          sys.out.attach( data.w, data.h );
 
-          if( data.keyLabel ) {
-            if( data.keyLabel == "Escape" ) {
-              stop = true;
-            }
-          }
-          if( !stop ) {
-              sys.input.inputKeyHandler( data );
-          }
-          else {
-            sys.processes.getRoot().runStop();
-          }
+        }
+        else if( data.type == "initbitmap" ) {
+
+          sys.log( "init with: " + JSON.stringify( data ) )
+          sys.bout.attach( data.w, data.h );
 
         }
         else {
@@ -185,6 +188,7 @@ function start_sys() {
         }
         else if ( e.clazz ) {
           sys.logerr( e.clazz + ": " + e.detail + " at "+ e.lineNr );
+          sys.out.writeln( "?" + e.clazz + " error at " + e.lineNr );
         }
 
         sys.logerr( JSON.stringify( e ) );
@@ -333,6 +337,63 @@ class ErrorHandler {
 
 //--EOC 
 
+// ## editor.js ==========---------- 
+// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+//  src/sys/modules/basic/worker/editor.js
+//  BY packworkers.js -- src/sys/modules/basic/worker/editor.js
+
+class Editor {
+
+  constructor( sys ) {
+    this.sys = sys;
+    this.output = sys.out;
+
+  }
+
+  addRunTime( rt ) {
+    this.runTime = rt;
+  }
+
+  interactiveKeyHandler( e ) {
+    //this.sys.log( "editor got even " + JSON.stringify( e ) );
+
+    if( e.keyLabel == "Enter" ) {
+      var command = sys.out.getCurrentLine();
+      this.output.writeln("");
+
+      this.runTime.executeInteractiveLine( command );
+
+    }
+    else if( e.keyLabel == "Backspace" ||
+            e.keyLabel == "Delete"  ) {
+      var x = this.output.getCursorPos()[0];
+      if( x>0) {
+          this.output.backspace();
+      }
+    }
+    else if( e.keyLabel == "ArrowUp" ) {
+      this.output.cursorMove("up");
+    }
+    else if( e.keyLabel == "ArrowDown" ) {
+      this.output.cursorMove("down");
+    }
+    else if( e.keyLabel == "ArrowLeft" ) {
+      this.output.cursorMove("left");
+    }
+    else if( e.keyLabel == "ArrowRight" ) {
+      this.output.cursorMove("right");
+    }
+    else {
+      if( e.key != null ) {
+        this.output.write( e.key );
+      }
+    }
+
+  }
+}
+
+//--EOC 
+
 // ## basicruntime.js ==========---------- 
 // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
 //  src/sys/modules/basic/worker/basicruntime.js
@@ -340,12 +401,16 @@ class ErrorHandler {
 
 class BasicRuntime {
 
-  constructor( sys ) {
+  constructor( sys, editor ) {
 
     this.debugFlag = false;
     this.sys = sys;
+    this.editor = editor;
+    this.editor.addRunTime( this );
+    this.listSpeed = 15;
 
     this.output = sys.out;
+    this.bitmap = sys.bout;
     this.input = sys.input;
     this.input.setHandler( this );
     this.input.setInterActive( false);
@@ -355,7 +420,6 @@ class BasicRuntime {
     this.runFlag = false;
     this.waitForMessageFlag = false;
     this.waitForMessageVariable = null;
-    this.message = null;
     this.executeLineFlag = false;
     this.goPlayExampleFlag = false;
     this.breakCycleFlag;
@@ -366,8 +430,8 @@ class BasicRuntime {
     this.nullTime = new Date().getTime();
 
     this.turboMode = false;
-    this.cmdCountPerCycleDefault = 1;
-    this.cmdCountPerCycleTurbo = 1000;
+    this.cmdCountPerCycleDefault = 10000;
+    this.cmdCountPerCycleTurbo = 20000;
     this.cmdCountPerCycle = this.cmdCountPerCycleDefault ;
 
     //var ctx = this.outtext;
@@ -403,7 +467,7 @@ class BasicRuntime {
         clearScreen: { clazz: this, method: "cbClearScreen" }
     }
 
-    this.setTurbo( true );
+    //this.setTurbo( true );
     this.synchClock( );
     this.exitMode = "stay";
 
@@ -470,30 +534,71 @@ class BasicRuntime {
     this.waitForMessageVariable = variable;
   }
 
-  receiveMessage( _message ) {
-    this.message = _message;
+  receiveMessage( _message, _data ) {
+
     this.vars[ this.waitForMessageVariable ] = _message;
     this.waitForMessageFlag = false;
+
+    if( _message == "displaysize" ) {
+        this.output.reInit( _data.textW, _data.textH );
+        this.output.reInit( _data.bitmapW, _data.bitmapH );
+
+        if( this.runFlag == false ) {
+            this.printReady();
+        }
+    }
   }
 
+  stop() {
+    if( this.runFlag ) {
+      this.runStop();
+    }
+    if( this.listFlag ) {
+      this.listStop();
+    }
+  }
 
-  interactiveKeyHandler( kbEvent ) {
+  interactiveKeyHandler( e ) {
 
-    if( kbEvent.keyLabel != "Enter" ) {
-      if( kbEvent.key != null ) {
-        this.lineInput += kbEvent.key;
-        this.output.write( kbEvent.key );
+    if( this.runFlag == true ) {
+      if( e.keyLabel == "Enter" ) {
+
+        this.output.writeln("");
+        this.handleLineInput( this.lineInput, true );
+        this.lineInput = "";
+      }
+      else if( e.keyLabel == "Backspace" ||
+              e.keyLabel == "Delete"  ) {
+        var x = this.output.getCursorPos()[0];
+        if( x>0) {
+            if( this.lineInput.length > 0 ) {
+                this.output.backspace();
+                this.lineInput = this.lineInput.substr(0,this.lineInput.length-1)
+            }
+
+        }
+      }
+      else if( e.keyLabel == "ArrowLeft" ) {
+        this.output.cursorMove("left");
+      }
+      else if( e.keyLabel == "ArrowRight" ) {
+        this.output.cursorMove("right");
+      }
+      else {
+        if( e.key != null ) {
+          this.lineInput += e.key;
+          this.output.write( e.key );
+        }
       }
     }
     else {
-      this.output.writeln("");
-      this.handleLineInput( this.lineInput, true );
+      this.editor.interactiveKeyHandler( e );
     }
-
   }
 
   HandleStopped() {
-    //old panicIfStopped
+
+    this.input.setInterActive( true);
   }
 
   importPGMHandler( content, filename ) {
@@ -504,7 +609,32 @@ class BasicRuntime {
     this.sys.log( "imported program " + filename +" with " + content.length + " bytes ");
   }
 
-  exportPGM() {
+  bootPGM( content, filename ) {
+    try {
+      var pgm = this.textLinesToBas( content.split("\n") );
+      this.fileName = filename;
+
+      this.program = pgm;
+      this.setProgram( pgm );
+
+      this.sys.log( "imported program " + filename +" with " + content.length + " bytes ");
+      return true;
+    }
+    catch ( e ) {
+      var tmp = 1;
+
+      var pgm = this.textLinesToBas( "" );
+      this.program = pgm;
+      this.HandleStopped();
+      this.printError("parsing syntax", false, e.lineNr, e.detail );
+      this.printReady();
+      return false;
+
+    }
+  }
+
+
+/*  exportPGM() {
     var exportName = "program.bas";
     if( this.fileName ) {
       exportName = this.fileName;
@@ -513,6 +643,7 @@ class BasicRuntime {
     var text = this.getProgramAsText();
     this.DESKTOP.requestDownload( text, exportName );
   }
+*/
 
   exitProgram() {
     this.closeWindow( this.windowId );
@@ -523,6 +654,7 @@ class BasicRuntime {
     this.listFlag = true;
     this.list = list;
     this.listPointer = 0;
+    this.input.setInterActive( false );
   }
 
   setExitMode( v ) {
@@ -546,12 +678,10 @@ class BasicRuntime {
     if( on ) {
       this.cmdCountPerCycle = this.cmdCountPerCycleTurbo ;
       this.turboMode = true;
-      this.cursorCountMax = this.cursorCountMaxTurbo;
       return;
     }
     this.cmdCountPerCycle = this.cmdCountPerCycleDefault ;
     this.turboMode = false;
-      this.cursorCountMax = this.cursorCountMaxNormal;
   }
 
   setProgram( pgm ) {
@@ -678,19 +808,22 @@ class BasicRuntime {
    return results;
   }
 
-  printError( s, supressLine, explicitline ) {
+  printError( s, supressLine, explicitline, detail ) {
 
+    var line1 = ("?" + s + " error" + this.onLineStr());
 
     if( explicitline ) {
-        this.output.writeln( ("?" + s + " error in " + explicitline ).toUpperCase() );
-        return;
+        line1 = ( ("?" + s + " error in " + explicitline ) );
     }
     if( supressLine ) {
 
-        this.output.writeln( ("?" + s + " error").toUpperCase(), true );
-        return;
+        line1 = ( ("?" + s + " error") );
     }
-    this.output.writeln(  ("?" + s + " error" + this.onLineStr()).toUpperCase(), true );
+
+    this.output.writeln(  line1 );
+    if( detail ) {
+      this.output.writeln(  ">> " + detail );
+    }
 
   }
 
@@ -747,13 +880,6 @@ class BasicRuntime {
 
     this.clrPGM();
     this.setTurbo( false );
-  }
-
-  passChars( chs, nl ) {
-
-    this.hideDebug();
-    var xy = this.sendChars( chs, nl );
-
   }
 
   compressPGMText( pgmTxt ) {
@@ -979,9 +1105,6 @@ class BasicRuntime {
       if( p.data == "." ) {
         val = 0;
       }
-      else if( p.data == "~" ) {
-        val = Math.PI;
-      }
       else if((""+p.data).indexOf(".") >= 0) {
         val = parseFloat(p.data);
       }
@@ -1003,6 +1126,15 @@ class BasicRuntime {
             this.padZeros2(val[2]);
         }
       }
+      else if(p.data == "CURRENTLINE") {
+        val = this.runPointer;
+        if( val != -1 ) {
+          val = parseInt( this.program[ val ][0] );
+        }
+      }
+      else if(p.data == "PI") {
+        val = Math.PI;
+      }
       else {
         val = this.vars[ p.data ];
       }
@@ -1015,11 +1147,11 @@ class BasicRuntime {
       var arr = this.vars[ varIntName ];
 
       if( arr === undefined ) {
-        throw "@no such array";
+        throw "@no such array@Array '"+ varIntName+"' does not exist";
       }
 
       if( arr.getIndexCount() != p.indices.length ) {
-          throw "@bad subscript";
+          throw "@bad subscript@Array index dimensions do not match";
       }
 
       var indices = [];
@@ -1059,7 +1191,7 @@ class BasicRuntime {
 
             stc = ecommands[ nFunName ];
 
-            this.printError("no such function " + p.functionName);
+            this.printError("no such function: " + p.functionName);
             console.log("Cannot find functionName " + nFunName );
 
             throw "@no such function " + p.functionName;
@@ -1197,7 +1329,7 @@ class BasicRuntime {
       }
 
       else {
-        throw "@unknown op '"+p.op+"'";
+        throw "@syntax@unknown operator '"+p.op+"'";
       }
     }
 
@@ -1251,6 +1383,7 @@ class BasicRuntime {
           //console.log( l[0] + "after input >>>>(" + this.runPointer + ":"  + this.runPointer2 +")");
       }
 
+      this.sys.blinkMode( false  );
 
       if( this.runPointer >=  p.length ) {
 
@@ -1266,6 +1399,7 @@ class BasicRuntime {
         c.clearCursor();
         this.printLine("");
         this.printLine("ready.");
+
       }
 
     }
@@ -1295,7 +1429,9 @@ class BasicRuntime {
 
     try {
 
-
+      if( this.bitmap.isActive() ) {
+        this.bitmap.triggerFlush();
+      }
 
       if( !this.runFlag ||
             this.inputFlag ||
@@ -1303,23 +1439,15 @@ class BasicRuntime {
              ) {
 
         if( this.listFlag ) {
-           if( this.listPointer < this.list.length ) {
+           var countdown = this.listSpeed;
+           while( this.listPointer < this.list.length && countdown-- > 0 ) {
                this.listCodeLine( this.list[ this.listPointer ] );
                this.listPointer++;
            }
-           else {
-             this.listFlag = false;
-             this.printLine("ready.");
+           if (  this.listPointer >= this.list.length ){
+             this.listStop();
            }
 
-        }
-        if(this.cursorCount++>this.cursorCountMax) {
-          this.cursorCount = 0;
-
-          if( !this.listFlag )
-            {
-              c.blinkCursor();
-            }
         }
       }
       else {
@@ -1421,7 +1549,7 @@ class BasicRuntime {
 
       if( this.erh.isSerializedError( e ) ) {
         var err = this.erh.fromSerializedError( e );
-        this.printError( err.clazz );
+        this.printError( err.clazz, undefined, undefined, err.detail );
       }
       else {
         this.printError("unexpected");
@@ -1478,12 +1606,20 @@ class BasicRuntime {
     this.goto( line );
   }
 
-  goto( line ) {
+  goto( line0 ) {
 
     //console.log( "goto line " + line)
     var pgm = this.program;
     var len=this.program.length;
     var found = false;
+    var line;
+
+    if( (typeof line0) == "number" ) {
+        line = line0;
+    }
+    else {
+        line = this.evalExpression( line0 );
+    }
 
     for( var i=0; i<len; i++) {
       var l = pgm[i];
@@ -1509,10 +1645,11 @@ class BasicRuntime {
     if( this.listFlag ) {
       var c = this.output;
       this.listFlag = false;
-      c.clearCursor();
+      this.HandleStopped();
       this.printLine( "ready.");
     }
   }
+
 
   runStop() {
     if( this.runFlag ) {
@@ -1551,25 +1688,24 @@ class BasicRuntime {
   }
 
 
+  printChar( c  ) {
+    this.output.write( c );
+  }
+
   listCodeLine( rawLine ) {
 
     var inString = false;
-    for( var i=0; i<rawLine.length; i++ ) {
+/*    for( var i=0; i<rawLine.length; i++ ) {
 
       var c = rawLine.charAt(i);
 
-      if( !inString ) {
-        this.sendChars( c, false  );
-      }
-      else {
-        this.sendCharsSimple( c, false );
-      }
+      this.printChar( c );
 
       if( c == "\"" ) {
         inString = !inString;
       }
-    }
-    this.printLine( "" );
+    }*/
+    this.printLine( rawLine );
 
   }
 
@@ -1836,11 +1972,13 @@ class BasicRuntime {
 
     this.executeLineFlag = false;
 
+
     if( this.startAsGoto ) {
         this.startAsGoto = false;
 
         var bak1 = this.runPointer;
         var bak2 = this.runPointer2;
+
 
         this.runPGM();
 
@@ -1851,6 +1989,7 @@ class BasicRuntime {
         return;
     }
 
+    this.input.setInterActive( false);
 
     var c = this.output;
     var p = this.program;
@@ -1889,6 +2028,14 @@ class BasicRuntime {
       this.runPointer = 0;
       this.runPointer2 = 0;
     }
+    else {
+      this.runFlag = false;
+      this.inputFlag = false;
+      this.runPointer = 0;
+      this.runPointer2 = 0;
+      this.input.setInterActive( true);
+      this.printReady();
+    }
   }
 
 
@@ -1920,11 +2067,11 @@ class BasicRuntime {
     if( ctxv.jumpTo.cmdPointer >= cmdArrayLen )  {
 
       if( this.runPointer == -1) {
-        throw "@Cannot find command after for";
+        throw "@syntax@Can't find command after 'FOR'";
       }
       else {
         if( ( this.runPointer + 1) >= linePointersLen ) {
-          throw "@cannot find command after for, on next line";
+          throw "@syntax@Can't find command after 'FOR', on next line";
         }
         ctxv.jumpTo.line++;
         ctxv.jumpTo.cmdPointer = 0;
@@ -1936,7 +2083,7 @@ class BasicRuntime {
   doForNext( nextVarName ) {
     var ctx = this.forContext;
     if( ctx.default.length == 0 ) {
-      throw "@next without for";
+      throw "@syntax@Next without for";
     }
     var varName = ctx.default[ctx.default.length-1];
     if( nextVarName  != null ) {
@@ -2301,7 +2448,7 @@ class BasicRuntime {
           else if( ! cmd.var.endsWith("$") ) {
               var v = this.evalExpression( cmd.expression );
               if( ! (typeof v == "number") ) {
-                this.printError("type mismatch");
+                this.printError("type mismatch", undefined, undefined, "value not a number");
                 return [END_W_ERROR,i+1,cnt];
               }
               arr.set( indices, this.evalExpression( cmd.expression ) );
@@ -2325,7 +2472,7 @@ class BasicRuntime {
           else if( ! cmd.var.endsWith("$") ) {
               var v = this.evalExpression( cmd.expression );
               if( ! (typeof v == "number") ) {
-                this.printError("type mismatch");
+                this.printError("type mismatch", undefined, undefined, "value not a number");
                 return [END_W_ERROR,i+1,cnt];
               }
               this.vars[ cmd.var ] = this.evalExpression( cmd.expression );
@@ -2474,6 +2621,12 @@ class BasicRuntime {
     this.inputVarsPointer = 0;
     this.output.write( "? ");
     this.lineInput = "";
+    this.sys.blinkMode( true );
+
+  }
+
+  executeInteractiveLine( str ) {
+    this.handleLineInput( str, false );
   }
 
   handleLineInput( str, isInputCommand ) {
@@ -2510,7 +2663,7 @@ class BasicRuntime {
 
           if( isNaN( num ) ) {
             this.printLine("?redo from start");
-            this.sendChars( "? " , false);
+            this.printChar( "? ");
             return;
           }
           this.setVar( this.inputVars[ this.inputVarsPointer ], num );
@@ -2522,7 +2675,7 @@ class BasicRuntime {
           this.exitInputState();
         }
         else {
-          this.sendChars( "?? " , false);
+          this.printChar( "?? ");
         }
 
         if( this.debugFlag ) {
@@ -2546,7 +2699,7 @@ class BasicRuntime {
       this.parseLineNumber = -1;
       if( this.erh.isError( e ) ) {
         this.parseLineNumber = e.lineNr;
-        this.printError( e.clazz, true );
+        this.printError( e.clazz, true, undefined, e.detail );
       }
       else {
         this.printError( "syntax", true );
@@ -2584,7 +2737,7 @@ class BasicRuntime {
         if( this.erh.isSerializedError( e ) ) {
           var err = this.erh.fromSerializedError( e );
           this.parseLineNumber = err.lineNr;
-          this.printError( err.clazz );
+          this.printError( err.clazz, undefined, undefined, err.detail );
         }
         else if( this.erh.isError( e ) ) {
           var err = e;
@@ -2625,11 +2778,13 @@ class BasicRuntime {
 
 class ExtendedCommands {
 
-  constructor( context ) {
-    this.output = context.output;
-    this.html = context.html;
-    this.input = context.input;
-    this.context = context;
+  constructor( runtime ) {
+    this.output = runtime.output;
+    this.bitmap = runtime.bitmap;
+    this.html = runtime.html;
+    this.input = runtime.input;
+    this.runtime = runtime;
+    this.sys = runtime.sys;
     this.cmds = {};
     this.func = {};
     this.statementList = null;
@@ -2690,6 +2845,101 @@ class ExtendedCommands {
   }
 
 
+  _stat_gcolor( pars ) {
+
+    var result;
+
+    if( pars.length != 1) {
+      this.erh.throwError( "parameter count", "expected color" );
+      return
+    }
+
+    if( pars.length == 1) {
+        var col = pars[0].value;
+        this.bitmap.setLineColor( col );
+        return
+    }
+
+  }
+
+
+  _stat_line( pars ) {
+    if( pars.length != 4 ) {
+      this.erh.throwError( "parameter count", "expected 2 (x0,y0,y1,y1), not " + pars.length );
+      return;
+    }
+
+    if( !this.bitmap.isActive() ) {
+      this.erh.throwError( "invalid display mode", "current mode cannot show graphics" );
+      return;
+    }
+
+    this.bitmap.line(
+      pars[0].value,
+      pars[1].value,
+      pars[2].value,
+      pars[3].value
+
+    );
+  }
+
+  _stat_plot( pars ) {
+    if( pars.length != 2 ) {
+      this.erh.throwError( "parameter count", "expected 2 (x,y), not " + pars.length );
+      return;
+    }
+
+    if( !this.bitmap.isActive() ) {
+      this.erh.throwError( "invalid display mode", "current mode cannot show graphics" );
+      return;
+    }
+
+    this.bitmap.plot( pars[0].value, pars[1].value );
+  }
+
+  _stat_center( pars ) {
+
+    var string;
+
+    if( pars.length > 1 ) {
+      this.erh.throwError( "too many parameters", "expected max 2, not " + pars.length );
+      return;
+    }
+
+    if( pars.length == 0 ) {
+      return;
+    }
+
+    string = pars[0].value;
+
+    this.output.center( string );
+  }
+
+
+  _stat_locate( pars ) {
+
+    var row = -1, col = -1;
+
+    if( pars.length > 2 ) {
+      this.erh.throwError( "too many parameters", "expected max 2, not " + pars.length );
+      return;
+    }
+
+    if( pars.length == 0 ) {
+      return;
+    }
+
+    if( pars.length >= 1 ) {
+      row = pars[0].value;
+    }
+
+    if( pars.length >= 2 ) {
+      col = pars[1].value;
+    }
+
+    this.output.setCursorPos( col, row );
+  }
+
   _stat_hide( pars ) {
     this.output.control( 25 );
   }
@@ -2737,7 +2987,7 @@ class ExtendedCommands {
           exparts2.parts.push( exparts.parts[j] );
         }
       }
-      value = this.context.evalExpression( exparts2 );
+      value = this.runtime.evalExpression( exparts2 );
 
       if( i == handleIx ) {
         htmlHandle =  value;
@@ -2778,9 +3028,69 @@ class ExtendedCommands {
         return
     }
 
-    var col = pars[0].value;
+    if( pars.length == 1) {
+        var col = pars[0].value;
+        this.output.control( 16, col );
+        return
+    }
 
-    this.output.control2( 16, col );
+    var bgcol = pars[1].value;
+    var col = pars[0].value;
+    this.output.control( 16, col   );
+    this.output.control( 17, bgcol );
+
+    if( pars.length == 3) {
+        var border = pars[2].value;
+        this.output.control( 18, border );
+        return
+    }
+
+  }
+
+  _stat_display( pars ) {
+
+    var result;
+
+    if( pars.length == 0) {
+        return
+    }
+
+    if( pars.length > 1) {
+        this.erh.throwError( "too many variables", "expected one parameter only" );
+    }
+
+    var mode = pars[0].value;
+    this.sys.setDisplayMode( this.runtime, mode   );
+    this.runtime.startWaitForMessage( "displaysize" )
+
+
+  }
+
+
+  _stat_border( pars ) {
+
+    var result;
+
+    if( pars.length == 0) {
+        return
+    }
+
+    if( pars.length > 1) {
+        this.erh.throwError( "too many parameters", "expected one parameter only" );
+    }
+
+    var bcol = pars[0].value;
+    this.output.control( 18, bcol );
+
+  }
+
+  _stat_export( pars ) {
+    if( pars.length > 0) {
+        this.erh.throwError( "too many parameters", "export needs no parameters" );
+    }
+
+    var code = this.runtime.getProgramAsText();
+    this.sys.export( code );
   }
 
   _fun_uc_DLR_( pars ) {
@@ -2795,12 +3105,70 @@ class ExtendedCommands {
     return "?";
   }
 
+  _fun_dc_DLR_( pars ) {
+
+    var val = "";
+
+    val = String.fromCodePoint( 17 ) + String.fromCodePoint( pars[0].value) + String.fromCodePoint( pars[1].value);
+
+    return val;
+  }
 
   _fun_html_DLR_( pars ) {
     return
       this.html.get();
   }
 
+
+  _fun_width( pars ) {
+
+    if( pars.length != 0 ) {
+        this.erh.throwError( "too many parameters", "width() has no parameters" );
+    }
+
+    var wh = this.bitmap.getDimensions();
+    return wh[0];
+  }
+
+  _fun_height( pars ) {
+
+    if( pars.length != 0 ) {
+        this.erh.throwError( "too many parameters", "width() has no parameters" );
+    }
+
+    var wh = this.bitmap.getDimensions();
+    return wh[0];
+  }
+
+  _fun_cols( pars ) {
+
+    if( pars.length != 0 ) {
+        this.erh.throwError( "too many parameters", "cols() has no parameters" );
+    }
+
+    var wh = this.output.getDimensions();
+    return wh[0];
+  }
+
+  _fun_columns( pars ) {
+
+    if( pars.length != 0 ) {
+        this.erh.throwError( "too many parameters", "columns() has no parameters" );
+    }
+
+    var wh = this.output.getDimensions();
+    return wh[0];
+  }
+
+  _fun_rows( pars ) {
+
+    if( pars.length != 0 ) {
+        this.erh.throwError( "too many parameters", "rows() has no parameters" );
+    }
+
+    var wh = this.output.getDimensions();
+    return wh[1];
+  }
 
 }
 
@@ -2836,10 +3204,12 @@ var pgmman = new BasicProgramManager();
 
 class BasicCommands {
 
-  constructor( context ) {
-    this.output = context.output;
-    this.input = context.input;
-    this.context = context;
+  constructor( runtime ) {
+    this.output = runtime.output;
+    this.bitmap = runtime.bitmap;
+    this.input = runtime.input;
+    this.runtime = runtime;
+    this.sys = runtime.sys;
     this.cmds = {};
     this.func = {};
     this.statementList = null;
@@ -2892,7 +3262,7 @@ class BasicCommands {
 
   /************************ commands ************************/
   _stat_new( pars ) {
-    this.context.new();
+    this.runtime.new();
   }
 
   _stat_list( pars ) {
@@ -2932,9 +3302,9 @@ class BasicCommands {
       start = parts[0].data;
     }
 
-    var context = this.context;
+    var runtime = this.runtime;
     var list = [];
-    for (const l of context.program)
+    for (const l of runtime.program)
       {
 
         var lineNr = parseInt(l[0]);
@@ -2943,7 +3313,7 @@ class BasicCommands {
         }
       }
 
-      this.context.enterListMode( list );
+      this.runtime.enterListMode( list );
   }
 
   _if_get() {
@@ -2977,15 +3347,15 @@ class BasicCommands {
       this.erh.throwError( "not a var", "parameter 0" );
     }
 
-    var data = this.context.readData();
+    var data = this.runtime.readData();
     if( data === undefined ) { this.erh.throwError( "out of data" ); }
     else {
       if( data.type =="num" ) {
-        this.context.setVar(
+        this.runtime.setVar(
           p0.value, parseInt( data.data ) );
         }
         else {
-          this.context.setVar(
+          this.runtime.setVar(
             p0.value,  data.data );
         }
       }
@@ -2999,9 +3369,9 @@ class BasicCommands {
     }
 
     var k = this.input.getKey();
-    if( k == null ) { this.context.setVar(p0.value, ""); }
+    if( k == null ) { this.runtime.setVar(p0.value, ""); }
     else {
-      this.context.setVar(p0.value, k.key );
+      this.runtime.setVar(p0.value, k.key );
     }
   }
 
@@ -3037,61 +3407,61 @@ class BasicCommands {
       }
     }
 
-    this.context.startConsoleDataInput( vars );
+    this.runtime.startConsoleDataInput( vars );
 
   }
 
   _stat_restore( pars ) {
-    this.context.restoreDataPtr();
+    this.runtime.restoreDataPtr();
   }
 
   _stat_load( pars ) {
-    var context = this.context;
+    var runtime = this.runtime;
     var result;
 
-    context.printLine("");
+    runtime.printLine("");
 
     if( pars.length == 0) {
-      context.printLine("searching");
+      runtime.printLine("searching");
     }
     else {
-      context.printLine("searching for " + pars[0].value);
+      runtime.printLine("searching for " + pars[0].value);
     }
 
     if( pars.length == 0) {
-        result = context.load( false );
+        result = runtime.load( false );
     }
     else {
-      result = context.load( pars[0].value );
+      result = runtime.load( pars[0].value );
     }
 
     if( !result ) {
-      context.printLine("?not found error");
+      runtime.printLine("?not found error");
     }
     else  {
 
       if( !result[1] ) {  //only print when not a snapshot
 
         if( pars.length == 0) {
-          context.printLine("found default");
+          runtime.printLine("found default");
         }
         else {
-          context.printLine("found "+pars[0].value);
+          runtime.printLine("found "+pars[0].value);
         }
-        context.printLine("loading");
+        runtime.printLine("loading");
       }
 
     }
   }
 
   _stat_save( pars ) {
-    var context = this.context;
+    var runtime = this.runtime;
 
     if( pars.length == 0) {
-        context.save( false );
+        runtime.save( false );
     }
     else {
-      context.save( pars[0].value );
+      runtime.save( pars[0].value );
     }
   }
 
@@ -3108,9 +3478,9 @@ class BasicCommands {
   }
 
   _stat_run( pars ) {
-    var context = this.context;
+    var runtime = this.runtime;
 
-    context.runPGM();
+    runtime.runPGM();
   }
 
   _if_print() {
@@ -3133,7 +3503,7 @@ class BasicCommands {
 
   _stat_print( pars ) {
 
-    var context = this.context;
+    var runtime = this.runtime;
     var con= this.output;
 
     if( pars.length == 0 ) {
@@ -3177,7 +3547,7 @@ class BasicCommands {
           exparts2.parts.push( exparts.parts[j] );
         }
       }
-      value = context.evalExpression( exparts2 );
+      value = runtime.evalExpression( exparts2 );
 
       if( i == 0) {
         con.write( this.normalizeIfNumber( value ) );
@@ -3193,7 +3563,7 @@ class BasicCommands {
 
 
   _stat_clr( pars ) {
-    return this.context.clrPGM();
+    return this.runtime.clrPGM();
   }
 
   /************************ functions ************************/
@@ -3237,21 +3607,57 @@ class BasicCommands {
     return this.randnrs[ this.randIndex ];
   }
 
-  intSeedRand( x ) {
-    var base = Math.floor( x * 11 );
-    this.randIndex= base % this.randnrs.length;
-    this.randStep = 1+(base % 7);
+  intSeedRand( x0 ) {
+
+    if( x0 < 0) {
+      var x = -x0;
+      var base = Math.floor( x * 11 );
+      this.randIndex= base % this.randnrs.length;
+      this.randStep = 1+(base % 7);
+
+      /* Also reseed random buffer */
+      this.randnrs = [];
+      for(var i=0; i<10000;i++) {
+        this.randnrs.push( Math.random() );
+      }
+    }
+    else {
+
+      const minute = 1000 * 60;
+      const hour = minute * 60;
+      const day = hour * 24;
+      const year = day * 365;
+
+      const d = new Date();
+      let seedModifier = Math.round(d.getTime() / year);
+
+      x = -x;
+      var base = Math.floor( seedModifier * 11 );
+      this.randIndex= base % this.randnrs.length;
+      this.randStep = 1+(base % 7);
+
+      /* Also reseed random buffer */
+      this.randnrs = [];
+      for(var i=0; i<10000;i++) {
+        this.randnrs.push( Math.random() );
+      }
+    }
+
   }
 
 
   _fun_rnd( pars ) {
 
-    if( pars.length <1) {
-      this.erh.throwError( "syntax", "missing parameter 0" );
+    if( pars.length >1) {
+      this.erh.throwError( "syntax", "rnd takes one parameter" );
     }
 
-    if( pars[0].value < 0) {
-      this.intSeedRand( -pars[0].value );
+    if( pars.length == 1) {
+
+      if( pars[0].value == 0 ) {
+        return Math.random();
+      }
+      this.intSeedRand( pars[0].value );
     }
 
     return this.intGetNextRand();
@@ -3266,7 +3672,7 @@ class BasicCommands {
   }
 
   _fun_pos( pars ) {
-    return this.context.getLinePos();
+    return this.runtime.getLinePos();
   }
 
   _fun_left_DLR_( pars ) {
@@ -3346,7 +3752,7 @@ class BasicCommands {
   }
 
   _fun_tab( pars ) {
-    var context = this.context;
+    var runtime = this.runtime;
 
     if( pars.length <1) {
       this.erh.throwError( "syntax", "missing parameter 0" );
@@ -3373,7 +3779,7 @@ class BasicCommands {
 
 
   _fun_jiffies( pars ) {
-    return this.context.getJiffyTime( );
+    return this.runtime.getJiffyTime( );
   }
 }
 
@@ -3717,7 +4123,7 @@ class Parser {
 					//all ok, next par
 				}
 				else {
-					this.throwError( context, "expected comma or ), got "+token.type + " " + token.data);
+					this.throwError( context, "Expected ',' or ')', got '" + token.data + "'");
 				}
 			}
 			even = !even;
@@ -3743,7 +4149,7 @@ class Parser {
 		var token = context.tokens.shift();
 
 		if( !(token.type == "bracket" && token.data == "(")) {
-			this.throwError( context, "parsing subexpression, expected bracket, not " + token.type + " - " + token.data);
+			this.throwError( context, "parsing subexpression, expected \"bracket\", not '" + token.data + "'");
 		}
 
 		var endTokens = [];
@@ -3764,17 +4170,18 @@ class Parser {
         str = str + "'" + token.type + "'";
     }
     else {
-      str = str + "'" + token.type + "/" + token.data + "'";
+      //str = str + "'" + token.type + "/" + token.data + "'";
+      str = str + "'" + token.data + "'";
     }
 
     return str;
   }
 
-  endTokensToString( endTokenArry )  {
+  endTokensToString( endTokenArray )  {
     var str = "";
 
-    for( var et=0; et<endTokenArry.length; et++) {
-      var endToken = endTokenArry[et];
+    for( var et=0; et<endTokenArray.length; et++) {
+      var endToken = endTokenArray[et];
 
       if( str != "") { str+= " ";}
       str += this.tokensToString( endToken );
@@ -3841,7 +4248,7 @@ class Parser {
         endLoop = context.tokens.length == 0;
       }
       if( !endLoop ) {
-        this.throwError( context, "empty simple expression end expected");
+        this.throwError( context, "Empty simple expression end expected");
       }
     }
 
@@ -4083,7 +4490,7 @@ class Parser {
           continue;
         }
 				else {
-					this.throwError( context, "expected number, string, symbol or bracket, not " + token.data);
+					this.throwError( context, "Expected \"number\", \"string\", \"symbol\" or \"bracket\", not " + token.data);
 				}
         op = null;
 			}
@@ -4093,9 +4500,9 @@ class Parser {
 					op = token.data;
 				}
 				else {
-					this.throwError( context, "expected operator or "+
+					this.throwError( context, "Expected \"operator\" or one of ("+
           this.endTokensToString(endTokens)+
-          ", not " + token.type + " " + token.data);
+          "), not '" + token.data + "'");
 				}
 			}
 			even = !even;
@@ -4271,26 +4678,9 @@ class Parser {
 
         }
         else {
-          this.throwError( context, "let, unexpected token " + token.type );
+          this.throwError( context, "Unexpected data after 'LET': '" + token.data + "'" );
         }
 
-/*parseAssignment( context, preTokens, commands, command, nameToken, token0  ) {
-parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  ) {
-
-
-        if( token.type != "eq") {
-          this.throwError( context, "LET expects =");
-        }
-
-        var cmdType = "assignment";
-        command.type = cmdType;
-        command.var = nameToken;
-
-        var endTokens = [];
-        endTokens.push( { type: "cmdsep", data: "@@@all" });
-
-        command.expression = this.parseBoolExpression( context, endTokens );
-        commands.push( command );*/
       }
       else if( controlToken == "DIM") {
 
@@ -4405,13 +4795,25 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
         }
 
         if( token.type != "num") {
-          this.throwError( context, "GOTO/GOSUB expects number", "undef'd statement");
+          //this.throwError( context, "GOTO/GOSUB expects number", "undef'd statement");
+
+          tokens.unshift( token );
+
+          var endTokens = [];
+          endTokens.push( { type: "cmdsep", data: "@@@all" });
+
+          var expression = this.parseBoolExpression( context, endTokens );
+          command.params=[];
+          command.params[0] = expression;
+          commands.push( command );
+          return;
+
         }
         num = parseInt(token.data);
         token = tokens.shift();
         if( token !== undefined ) {
           if( token.type != "cmdsep") {
-            this.throwError( context, "expected cmdsep, instead of "+token.type+"/"+token.data);
+            this.throwError( context, "Expected \"command separator\", instead of '"+token.data+"'");
           }
         }
 
@@ -4540,7 +4942,7 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
           }
           else {
             if(! ( token.type == "cmdsep" && token.data == ":")) {
-              throw "FOR unexpected token " + token.type + "/" + token.data;
+              throw "FOR: unexpected token '" + token.data +"'";
             }
           }
         }
@@ -4573,7 +4975,7 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
           }
 
           if( token.type != "name" ) {
-            throw "next expected var or nothing";
+            throw "Next expected variable, not '" +token.data+ "'";
           }
 
           var nextcommand = {
@@ -4594,7 +4996,7 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
             break;
           }
           if( !( token.type == "sep" && token.data == "," )) {
-            throw "expected comma, found " + token.type + "/"+token.data;
+            throw "Expected comma, found '" + token.data + "'";
           }
         }
 
@@ -4661,7 +5063,7 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
 
 
             if( expr1 === undefined ) {
-              throw "data expected data";
+              throw "DATA: expected data";
             }
 
             dataArray.push( expr1 );
@@ -4744,7 +5146,7 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
             continue;
           }
           else {
-            this.throwError( context, "unexpected chars in statement call: '" + token.data +"'");
+            this.throwError( context, "Unexpected characters in statement call: '" + token.data +"'");
           }
         }
         else {
@@ -4788,7 +5190,12 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
 			}
 
 			if( token.type != "name" ) {
-				this.throwError( context, "Unexpected token, expected symbolname, got " + token.type + "/" + token.name) ;
+				if( token.type != "trash" ) {
+          this.throwError( context, "Unexpected token, expected symbolname, got '" + oken.data +"'") ;
+        }
+        else {
+          this.throwError( context, "Unexpected character, expected \"symbolname\", got " + token.detail ) ;
+        }
 			}
 
 			var nameToken = token.data;
@@ -4829,7 +5236,7 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
       else {
           if( !keyword ) {
             console.log("Dump: ",context, preTokens, commands, command, nameToken, token);
-            this.throwError( context, "statement without keyword");
+            this.throwError( context, "no such statement: " + nameToken );
           }
           this.parseStatementCall( context, preTokens, commands, command, nameToken, token );
 
@@ -4871,18 +5278,18 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
 
     var errContext, detail, lineNr=-1;
     try {
-      errContext="TOKENIZER";
-      detail="INIT";
+      errContext="tokenizer";
+      detail="init";
   		var toker = new Tokenizer( new StringReader ( line ), this.KEYWORDS );
 
-      detail="PARSING TOKENS";
+      detail="parsing tokens";
       var tokens = toker.tokenize();
       if( this.debugFlag ) {
         console.log("Tokens after tokenizer");
       }
       this.logTokens( tokens );
 
-      detail="INTERNAL";
+      detail="internal";
       tokens = this.upperCaseNameTokens( tokens );
       tokens = this.removePadding( tokens );
       tokens = this.mergeCompTokens( tokens );
@@ -4909,8 +5316,8 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
         lineNumber: lineRecord.lineNumber
       }
 
-      errContext = "PARSER";
-      detail="PARSING COMMANDS";
+      errContext = "parser";
+      detail="parsing commands";
       var commands = this.parseLineCommands( context );
       lineRecord.commands = commands;
       lineRecord.raw = line;
@@ -4926,7 +5333,7 @@ parseArrayAssignment( context, preTokens, commands, command, nameToken, token0  
         }
         throw e;
       }
-      this.throwError( null, errContext + ": " + detail );
+      this.throwError( null, errContext + " error (" +e+ ") while " + detail );
     }
   }
 
@@ -5004,6 +5411,7 @@ class Tokenizer {
 			this.tokens = [];
 			this.reader = reader;
 			this.keywords = keywords;
+			this.greedy = false;
 	}
 
 	isOpChar( ctx ) {
@@ -5040,26 +5448,23 @@ class Tokenizer {
 			ctx.endFound = true;
 		}
 
-		if( this.keywords.indexOf( ctx.seq ) >-1 ) {
-			//console.log("Found Keyword: " + ctx.seq );
-			ctx.endFound = true;
-		}
-		else if( ! (ctx.seq === undefined )) {
-			var trappedKW = false;
-			var trapped = null;
-			for( var i=0; i<this.keywords.length; i++) {
-				var kw = this.keywords[i];
-				if( ctx.seq.indexOf( kw ) > 0 )  {
-					trappedKW = true;
-					trapped = kw;
-					//console.log( "trapped-------------" );
-					//console.log( kw );
-					//console.log( ctx.seq );
-					//console.log( ctx );
-					return [rv, kw.length ];
-				}
+		if( this.greedy ) {
+			if( this.keywords.indexOf( ctx.seq.toUpperCase() ) >-1 ) {
+				ctx.endFound = true;
 			}
+			else if( ! (ctx.seq === undefined )) {
+				var trappedKW = false;
+				var trapped = null;
+				for( var i=0; i<this.keywords.length; i++) {
+					var kw = this.keywords[i];
+					if( ctx.seq.toUpperCase().indexOf( kw ) > 0 )  {
+						trappedKW = true;
+						trapped = kw;
+						return [rv, kw.length ];
+					}
+				}
 
+			}
 		}
 		return [rv,0];
 	}
@@ -5072,6 +5477,7 @@ class Tokenizer {
 			if( ctx.c == " " || ctx.c == "\t" || ctx.c == "\n" || ctx.c == "\r") {
 				return [true,0];
 			}
+
 			return [false,0];
 	}
 
@@ -5209,6 +5615,14 @@ class Tokenizer {
 				if( rv[0] ) {
 						var tok = this.readChars( read, rule[TYPEIX], rule[FUNCIX], rule[STRINGTYPEIX] );
 
+						if( tok.type == "name") {
+							tok.data = tok.data.toUpperCase();
+						}
+
+						if( tok.type == "trash") {
+							tok.detail = "'" + tok.data + "' (ASCII-code=" + tok.data.charCodeAt(0) + ")";
+						}
+
 						tokens.push( tok );
 						tokenFound = true;
 						break;
@@ -5234,9 +5648,10 @@ class Tokenizer {
 
 class Input {
 
-  constructor() {
+  constructor( sys ) {
     this.keyPress = [];
     this.interactive = false;
+    this.sys = sys;
   }
 
   setHandler( hc ) {
@@ -5244,19 +5659,27 @@ class Input {
   }
 
   setInterActive( flag ) {
+
     this.interactive = flag;
+    this.sys.blinkMode( flag  );
+    
   }
 
   inputKeyHandler( e )  {
 
+    var hc = this.handlerClazz;
     if( !this.interactive ) {
+
+      if( e.keyLabel == "Escape" ) {
+          hc["stop"]();
+      }
+      else {
         this.keyPress.push( e );
+      }
     }
     else {
 
-        var hc = this.handlerClazz;
         hc["interactiveKeyHandler"]( e );
-
     }
   }
 
@@ -5316,12 +5739,28 @@ class processes {
 
 	register( obj ) {
 
+		var newId = this.processes.length-1;
+
+		this.processes[newId] = obj;
+		obj.processId = newId;
+
+		return newId;
+	}
+
+	get( id ) {
+		return this.processes[ id ];
+	}
+
+	register( obj ) {
+
 		var newId = this.processes.length;
 
 		this.processes.push( obj );
 
+		obj.processId = newId;
 		return newId;
 	}
+
 
 	getRoot() {
 
@@ -5331,10 +5770,638 @@ class processes {
 
 //--EOC 
 
-// ## workerwrapper_static.js ==========---------- 
+// ## ../../rwbuffers/worker/textarea.js ==========---------- 
 // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
-//  src/sys/modules/basic/worker/workerwrapper_static.js
-//  BY packworkers.js -- src/sys/modules/basic/worker/workerwrapper_static.js
+//  src/sys/modules/basic/worker/../../rwbuffers/worker/textarea.js
+//  BY packworkers.js -- src/sys/modules/basic/worker/../../rwbuffers/worker/textarea.js
+
+class TextArea {
+
+	constructor( sys ) {
+		this.sys = sys;
+		this.cursorOn = false;
+		this.cols = 80;
+		this.rows = 30;
+		this.x = 0;
+		this.y = 0;
+		this.hidden = false;
+
+		this.dc = false;
+		this.dcCmd = false;
+
+		this.colors ={};
+		this.reverse = false;
+
+		this.colors.txtBgColor= 0;
+		this.colors.txtColor = 5;
+
+		this.initialized = false;
+
+		this.changes = { all: false, list: [] };
+	}
+
+	reInit( w, h ) {
+		this._int_initMode( w, h );
+	}
+
+
+	destroy() {
+
+			this.cellel = undefined;
+
+			this.changes = { all: false, list: [] };
+			this.initialized = false;
+		}
+
+
+	_int_addChangeAll() {
+
+		 this.changes.all = true;
+		 this.changes.list = [];
+
+	 }
+
+	_int_addChange( area ) {
+
+			if(  this.changes.all ) {
+				if( this.changes.list.length > 0 ) {
+						this.changes.list = [];
+				}
+				return;
+			}
+
+			var clist = this.changes.list;
+			if( clist.length > 0 ) {
+				var lc = clist[ clist.length -1 ];
+				var nc = area;
+				if( lc.y1 == lc.y2 && nc.y1 == nc.y2 && lc.y1 == nc.y1) {
+					if( nc.x1 == lc.x2 +1 ) {
+							var x2 = lc.x2;
+							var temp=1;
+							var changesTargetArray = lc.cells[0];
+							for( var i=0; i<area.cells[0].length; i++) {
+								var cell = area.cells[0][i];
+								changesTargetArray.push( cell );
+							}
+							lc.x2 = nc.x2;
+							return;
+					}
+				}
+			}
+
+		 	this.changes.list.push( area );
+
+	 }
+
+	_int_flushAll() {
+			this.changes.all = true;
+			this.changes.list = [];
+
+			this._int_flush();
+
+		}
+
+		_int_getArea( x1, y1, x2, y2 ) {
+			var cells = [];
+
+			for( var y=y1; y<=y2; y++) {
+				var row = [];
+				for( var x=x1; x<=x2; x++) {
+					row.push( this.cellel[ y][ x] );
+				}
+				cells.push( row );
+			}
+
+			var area =
+			{
+				 cells: cells,
+				 x1: x1,
+				 y1: y1,
+				 x2: x2,
+				 y2: y2
+			};
+
+			return area;
+
+		}
+
+	 _int_flush() {
+
+			if( this.changes.all ) {
+				this.sys.post( "textupdate-all",
+						{
+ 							fg: this.colors.txtColor,
+							bg: this.colors.txtBgColor,
+							cx: this.x,
+							cy: this.y,
+							cells: this.cellel
+						} );
+
+				this.changes.all = false;
+
+
+			}
+			else if( this.changes.list.length > 0 ) {
+
+				this.sys.post( "textupdate",
+					{
+						fg: this.colors.txtColor,
+						bg: this.colors.txtBgColor,
+						cx: this.x,
+						cy: this.y,
+						areasList:  this.changes.list
+					}  );
+				this.changes.list = [];
+			}
+			else {
+				this.sys.post( "textupdate",
+					{
+						fg: this.colors.txtColor,
+						bg: this.colors.txtBgColor,
+						cx: this.x,
+						cy: this.y,
+						areasList:  []
+					}  );
+
+			}
+
+		}
+
+
+
+		attach( w, h ) {
+			this._int_initMode( w, h);
+		}
+
+		_int_initMode( w, h ) {
+
+			if( this.initialized ) {
+				this.destroy();
+			}
+			var sys = this.sys;
+			//var msgs = sys.init.queuedMessages; TODO, what to do with queued messages
+
+			this.x = 0;
+			this.y = 0;
+
+			this.rows = h;
+			this.cols = w;
+
+			this.colors.txtBgColor= 0;
+			this.colors.txtColor = 5;
+
+			this.cellel = [];
+			for( var y=0; y<this.rows; y++) {
+				var rowArray = [];
+				for( var x=0; x<this.cols; x++) {
+					var cell = {
+						txt: " ",
+						fg: this.colors.txtColor,
+						bg: this.colors.txtBgColor
+					}
+					rowArray.push( cell );
+				}
+				this.cellel.push( rowArray );
+			}
+
+			this.changes = { all: true, list: [] };
+
+ 		  var _this = this;
+
+			this._int_flushAll();
+
+			this.sys.log("TBCON w Ready.");
+
+			this.initialized = true;
+	}
+
+
+	getDimensions() {
+			return [this.cols, this.rows ];
+	}
+
+	getCurrentLine() {
+		var y = this.y;
+		var str = "";
+		for( var i = 0; i< this.cols; i++) {
+			str += this.cellel[ y ][ i ].txt;
+		}
+		return str;
+	}
+
+
+
+	clear() {
+
+		this.cellel = [];
+		for( var y=0; y<this.rows; y++) {
+			var rowArray = [];
+			for( var x=0; x<this.cols; x++) {
+				var cell = {
+					txt: " ",
+					fg: this.colors.txtColor,
+					bg: this.colors.txtBgColor
+				}
+				rowArray.push( cell );
+			}
+			this.cellel.push( rowArray );
+		}
+
+		this.changes = { all: true, list: [] };
+
+		this.x = 0;
+		this.y = 0;
+
+		this._int_flushAll();
+	}
+
+
+	cursorMove( dir ) {
+		if( dir == "up" ) {
+			if( this.y>0) {
+				this.y--;
+			}
+		}
+		else if( dir == "down" ) {
+			if( this.y< (this.rows-1)) {
+				this.y++;
+			}
+		}
+		if( dir == "left" ) {
+			if( this.x>0) {
+				this.x--;
+			}
+		}
+		else if( dir == "right" ) {
+			if( this.x< (this.cols-1)) {
+				this.x++;
+			}
+		}
+		this._int_flush();
+	}
+
+	backspace() {
+		if( this.x == 0) {
+			return;
+		}
+
+		this.x--;
+		var cell = this.cellel[ this.y ][ this.x ];
+		cell.txt = " ";
+
+		var area = this._int_getArea( this.x, this.y, this.x, this.y, );
+		this._int_addChange( area );
+		this._int_flush();
+	}
+
+	nl() {
+
+			this.x = 0;
+			this.y ++;
+
+			if( this.y >= this.rows ) {
+
+				this.__int_scrollDown();
+				this.y = this.rows -1;
+
+				this._int_flushAll();
+				return;
+			}
+
+			this._int_flush();
+
+	}
+
+	__int_nl() {
+			this.x = 0;
+			this.y ++;
+			if( this.y >= this.rows ) {
+				this.__int_scrollDown();
+				this.y = this.rows -1;
+				return { scroll: true }
+			}
+			return { scroll: false }
+
+	}
+
+	writeln( str ) {
+
+			for( var i=0; i<str.length; i++) {
+				var c = str.substr(i,1);
+				this.__int_write_direct_ch( c );
+			}
+			var stat = this.__int_nl();
+			if( stat.scroll ) {
+					this._int_addChangeAll();
+			}
+			this._int_flush();
+	}
+
+	_int_write( str ) {
+		for (const c of str) {
+			this.__int_write_direct_ch( c );
+		}
+	}
+
+	write( str ) {
+			this._int_write( str );
+
+			this._int_flush();
+	}
+
+
+
+	__int_write_direct_ch( ch ) {
+
+		var code = ch.codePointAt(0);
+
+		if( this.dc && this.dcCmd ) {
+
+			this.dc = false;
+			this.dcCmd = false;
+			this._int_control( this.dcCmdCode, code );
+
+			return;
+		}
+
+		if( this.dc && !this.dcCmd ) {
+			this.dcCmd = true;
+			this.dcCmdCode = code;
+			return;
+		}
+
+		if( code == 17 ) {
+			//DC1
+			this.dc = true;
+			this.dcCmd = false;
+			return;
+		}
+
+		var cell = this.cellel[ this.y ][ this.x ];
+
+		if( cell == null ) {
+			console.log( "cell at " + this.x + "," + this.y +" == null ");
+			return;
+		}
+
+		cell.txt = ch;
+
+		if( !this.reverse  ) {
+			cell.fg = this.colors.txtColor;
+			cell.bg = this.colors.txtBgColor;
+		}
+		else {
+			cell.bg = this.colors.txtColor;
+			cell.fg = this.colors.txtBgColor;
+		}
+
+		var oldx = this.x;
+		var oldy = this.y;
+
+		this.x++;
+		if( this.x >= this.cols ) {
+			this.x = 0;
+			var stat = this.__int_nl();
+			if( stat.scroll ) {
+				this._int_addChangeAll();
+			}
+			return;
+		}
+
+		var area = this._int_getArea( oldx, oldy, oldx, oldy );
+		this._int_addChange( area );
+
+	}
+
+	writec( chr ) {
+
+		if( chr == "\n" ) {
+			var stat = this.__int_nl();
+			if( stat.scroll ) {
+					this._int_addChangeAll();
+			}
+
+			return;
+		}
+		this.__int_write_direct_ch( chr );
+		this._int_flush();
+	}
+
+
+	_int_setPos( x, y ) {
+
+		if(x >= 0) {
+				this.x = x;
+		}
+		if(y >= 0) {
+				this.y = y;
+		}
+
+		if( this.x >= this.cols ) { this.x = this.cols-1;}
+		if( this.y >= this.rows ) { this.y = this.rows-1;}
+	}
+
+
+	setPos( x, y ) {
+
+		this._int_setPos( x,y );
+
+		this._int_flush();
+	}
+
+
+	_int_control( chr, data ) {
+
+		if( chr == 16 ) {
+			this.colors.txtColor = data;
+		}
+		else if( chr == 17 ) {
+			this.colors.txtBgColor = data;
+		}
+		else if( chr == 18 ) {
+			document.body.style.backgroundColor = this.palette[ data ];  //TODO
+		}
+		else if( chr == 24 ) {  //CANCEL -> (we map it to) Clear Screen
+			this.clear();
+		}
+		else if( chr == 25 ) {  //End of Medium -> (we map it to) Hide
+			//this.hide();   TODO
+		}
+		else if( chr == 64 ) {
+			this.reverse = false;
+		}
+		else if( chr == 65 ) {
+			this.reverse = true;
+		}
+		else {
+			this.__int_write_direct_ch( "?" );
+		}
+	}
+
+	setCursorPos( x, y ) {
+		if( x<0 || y<0 ) { return ; }
+		if( x>=this.cols || y>= this.rows ) { return ; }
+
+		this.x = x;
+		this.y = y;
+
+		this._int_flush();
+	}
+
+	getCursorPos() {
+			return [this.x, this.y ];
+	}
+
+	control( chr, data ) {
+
+		this._int_control( chr, data );
+		this._int_flush();
+
+	}
+
+	center( str ) {
+
+			if( str.length > this.cols ) {
+				return;
+			}
+
+			var l = str.length;
+			var l2 = Math.floor( l/2 );
+
+			var wh = this.getDimensions();
+
+			var x = Math.floor( wh[0] / 2 ) - l2;
+			this._int_setPos( x, -1 );
+			this._int_write( str );
+
+			var area = this._int_getArea( 0, this.y, this.cols-1, this.y );
+			this._int_addChange( area );
+			this._int_flush();
+
+	}
+
+	__int_scrollDown() {
+		for( var x=0; x<this.cols; x++) {
+			for( var y=0; y<this.rows-1; y++) {
+				var cell = this.cellel[ y ][ x ];
+				var cellyp1 = this.cellel[ y+1 ][ x ];
+
+				cell.txt = cellyp1.txt;
+				cell.fg = cellyp1.fg;
+				cell.bg = cellyp1.bg;
+			}
+		}
+
+		//fill last row
+		var y2 = this.rows-1;
+		for( var x=0; x<this.cols; x++) {
+			var cell = this.cellel[ y2 ][ x ];
+			cell.txt = " ";
+			if( !this.reverse  ) {
+				cell.fg = this.colors.txtColor;
+				cell.bg = undefined;
+			}
+			else {
+				cell.fg = this.colors.txtColor;
+				cell.bg = "rgba(0,255,0,0.0)";
+			}
+		}
+
+	}
+}
+
+//--EOC 
+
+// ## ../../rwbuffers/worker/bitmap.js ==========---------- 
+// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+//  src/sys/modules/basic/worker/../../rwbuffers/worker/bitmap.js
+//  BY packworkers.js -- src/sys/modules/basic/worker/../../rwbuffers/worker/bitmap.js
+
+class BitMap {
+
+	constructor( sys ) {
+		this.sys = sys;
+    this.lineColor = 1;
+    this.changes = {};
+    this.changes.flag = false;
+    this.changes.pixels = [];
+  }
+
+	reInit( w, h ) {
+		this.width = w;
+    this.height = h;
+	}
+
+  attach( w, h ) {
+		this.reInit( w, h );
+	}
+
+  isActive() {
+    return this.width > 0;
+  }
+
+  getDimensions() {
+			return [this.width, this.height ];
+	}
+
+
+  line( x0,y0, x1, y1 ) {
+    this.sys.post( "nativeout",{
+      action: "line",
+      params: { x0:x0, y0:y0, x1:x1, y1:y1 }
+    });
+  }
+
+
+  triggerFlush() {
+
+    this._int_flush();
+
+  }
+
+  _int_flush() {
+
+    if( this.changes.flag ) {
+
+      this.sys.post( "gfxupdate",
+        {
+          pixels: this.changes.pixels
+        }
+      );
+    }
+
+    pixels: this.changes.pixels = [];
+    this.changes.flag = false;
+
+  }
+
+  plot( x, y ) {
+    var pixel = { x: Math.floor(x), y:Math.floor(y), c:this.lineColor };
+
+    this.changes.pixels.push( pixel );
+    this.changes.flag = true;
+
+  }
+
+  setLineColor( c ) {
+    this.lineColor = c;
+    this.sys.post( "nativeout",{
+      action: "gcolor",
+      params: { c: c }
+    });
+  }
+
+	destroy() {
+
+	}
+}
+
+//--EOC 
+
+// ## workerbootstrap_static.js ==========---------- 
+// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+//  src/sys/modules/basic/worker/workerbootstrap_static.js
+//  BY packworkers.js -- src/sys/modules/basic/worker/workerbootstrap_static.js
 
 sys.log("Starting");
 start_sys();

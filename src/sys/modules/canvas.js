@@ -118,7 +118,7 @@ class KERNALMODULE {
 			this.height = h;
 
 			console.log("Reinit with " , w, h);
-			console.log("Reinit with " , this.cols, this.rows);
+			console.log(" colsXrows " , this.cols, this.rows);
 			this.x = 0;
 			this.y = 0;
 			this.blinking = true;
@@ -367,9 +367,10 @@ class KERNALMODULE {
 		var fs = this.fontSizeInt;
 		var oc = this.colors;
 
+		var x; var y;
 		try {
-		for( var x=x0; x<=x1; x++) {
-			for( var y=y0; y<=y1; y++) {
+		for( x=x0; x<=x1; x++) {
+			for( y=y0; y<=y1; y++) {
 				var cell = this.cells[ y ][ x ];
 				var src = srccells[ y-y0 ][ x-x0 ];
 				var ch = src.txt;
@@ -389,6 +390,8 @@ class KERNALMODULE {
 			}
 		}
 	} catch ( e ) {
+		console.log("x= " + x + " y= " + y);
+		console.log("x0=", x0, "y0=",y0, "x1=",x1,"y1=",y1);
 		console.log(e);
 	}
 

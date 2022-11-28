@@ -10,51 +10,57 @@ import  privwarning from     './modules/privwarning.js';
 import  mutedinput from      './modules/mutedinput.js';
 import domelinput from      './modules/domelinput.js';
 import htmlwrapper from     './modules/htmlwrapper.js';
-import basic from           './modules/basic/apps.js';
 import sessionfs  from       './modules/sessionfs.js';
 import lfs  from             './modules/lfs.js';
 import ramfs  from           './modules/ramfs.js';
 import qfs  from             './modules/qfs.js';
 import scripturl  from       './modules/scripturl.js';
+import basic from           './modules/basic/apps.js';
 
 boot = new BootSys( staticLoading );
 var sys = boot.getSys();
-var con = canvas;
+
 
 boot.dep = {};
-boot.m.displaymodes = displaymodes;
-boot.m.tablecon = tablecon;
-boot.m.canvas = canvas;
-boot.m.simplewarning = simplewarning;
-boot.m.priv = privwarning;
-boot.m.mutedinput = mutedinput;
-boot.m.domelinput = domelinput;
-boot.m.htmlwrapper = htmlwrapper;
-boot.m.basic = basic;
-boot.m.sfs = sessionfs
-boot.m.lfs = lfs;
-boot.m.ramfs = ramfs;
-boot.m.script = scripturl;
-boot.m.qfs = qfs;
+boot.i = {}
+boot.i.displaymodes = displaymodes;
+boot.i.tablecon = tablecon;
+boot.i.canvas = canvas;
+boot.i.simplewarning = simplewarning;
+boot.i.priv = privwarning;
+boot.i.mutedinput = mutedinput;
+boot.i.domelinput = domelinput;
+boot.i.htmlwrapper = htmlwrapper;
+boot.i.basic = basic;
+boot.i.sfs = sessionfs
+boot.i.lfs = lfs;
+boot.i.ramfs = ramfs;
+boot.i.script = scripturl;
+boot.i.qfs = qfs;
 boot.dep.qfs = [ "ramfs", "lfs", "sfs", "script" ];
+boot.dep.basic = [ "canvas", "tablecon", "displaymodes", "qfs", "htmlwrapper" ];
 
 boot.initSimpleLogging();
 
 /* Instantiate modules */
-var mods = Object.getOwnPropertyNames( boot.m );
+var mods = Object.getOwnPropertyNames( boot.i );
 
 for( var i=0;i<mods.length;i++) {
   console.log("construct " + mods[ i ] );
-  boot.m[ mods[i] ] = new boot.m[ mods[i] ]( sys, boot.dep[ mods[i] ] );
+  boot.m[ mods[i] ] = new boot.i[ mods[i] ]( sys, boot.dep[ mods[i] ] );
 }
+
+
 
 sys.init.queuedMessages = sys.nulcon;
 sys.init.conStyle = boot.conStyle;
 sys.init.displayMode = boot.displayMode;
+sys.m = boot.m;
 
+sys.m.displaymodes.setMode( boot.displayMode );
+var con = sys.m.displaymodes.getDriver();
 boot.out = con;
 sys.out =  con;
-sys.m = boot.m;
 
 /* Initialize modules */
 for( var i=0;i<mods.length;i++) {
@@ -62,11 +68,12 @@ for( var i=0;i<mods.length;i++) {
   boot.m[ mods[i] ].init();
 }
 
-
 /* Get the boot script */
 
 try {
-  var script = boot.rootScript.getAttribute('basScript');
+
+
+  var script = boot.rootScript.dataset.script;
   if( script == null ) { script = "autorun.bas"; }
   boot.onReady = "script://" + script;
 }
