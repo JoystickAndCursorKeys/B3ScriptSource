@@ -11,9 +11,11 @@ class BasicRuntime {
     this.output = sys.out;
     this.bitmap = sys.bout;
     this.input = sys.input;
+    this.audio = sys.audio;
     this.input.setHandler( this );
     this.input.setInterActive( false);
     this.html = sys.html;
+    this.menuEnable = false;
 
     this.program = [];
     this.runFlag = false;
@@ -25,6 +27,8 @@ class BasicRuntime {
     this.inputFlag = false;
     this.listFlag = false;
     this.immersiveFlag = false;
+    this.statusChanged = false;
+
     this.gosubReturn = [];
     this.nullTime = new Date().getTime();
 
@@ -33,21 +37,21 @@ class BasicRuntime {
     this.cmdCountPerCycleTurbo = 20000;
     this.cmdCountPerCycle = this.cmdCountPerCycleDefault ;
 
-    //var ctx = this.outtext;
     var c = this.output;
     this.commands = new BasicCommands( this );
-    this.extendedcommands = new ExtendedCommands( this );
-    //this.extendedcommands.getStatements = function() { return [] };
-    //this.extendedcommands.getFunctions  = function() { return [] };
+    this.extendedcommands = new ExtendedCommands( this.commands, this );
 
     this.erh = new ErrorHandler();
-    this.vars = [];
+    this.vars = {};
     this.functions = [];
     this.data = [];
+    this.loadedData = { default: [] };
+    this.loadedLabel = null;
+
     this.kbBuffer = [];
 
     this.yPos = -1;
-    this.lineMarkers = [ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 ];
+
     this.SHORTLINE = 0;
     this.LONGLINESTART = 1;
     this.LONGLINEEND = 2;
@@ -128,9 +132,235 @@ class BasicRuntime {
 
   }
 
+  flagStatusChange() {
+    this.statusChanged = true;
+  }
+
+
+  getScopeVars( s ) {
+    return s.vars;
+  }
+
+  getFullVarList() {
+    var scopes = this.getFullScopes();
+    var varList = [];
+
+    for( var si = 0; si< scopes.length; si++ ) {
+
+      var fullscope = scopes[si];
+      var vars = this.getScopeVars( fullscope.scope );
+      var names = Object.getOwnPropertyNames( vars );
+
+      for( var i=0;i<names.length;i++) {
+        var name = names[i];
+        var value = vars[ name ];
+        var path = fullscope.path;
+        if( path == "" ) { path = ""; }
+        else { path += "/"; }
+        if( ! name.startsWith( "@array_" ) ) {
+            if( name.endsWith("$") ) {
+                varList.push( path + name + " = \"" + value + "\"" );
+            }
+            else {
+                varList.push( path + name + " = " + value );
+            }
+        }
+        else {
+            var descr = "";
+            for( var ii=0; ii<value.indices.length; ii++ ) {
+              if( ii>0 ) { descr += ","; }
+              descr += value.indices[  ii ];
+
+            }
+            varList.push( name.substr(7) + " = array with dim(" + descr + ")" );
+        }
+      }
+    }
+
+    return varList;
+  }
+
+  getFullScopes() {
+    var scopes = [];
+    var path = "";
+    for( var si = 0 ; si < this.scopes.length; si++ ) {
+      var scope = this.scopes[si].name;
+
+      if( si > 0) {
+        if( path != "" ) {
+          path += "/";
+        }
+        path += scope;
+      }
+
+      scopes.push( { path: path, scope: this.scopes[si]  } );
+    }
+
+    return scopes;
+  }
+
+  cpuNeeded() {
+    return this.runFlag;
+  }
+
+  getStatus() {
+
+    var status = "";
+    var lineNr;
+    if( this.runFlag ) {
+      lineNr = this.program[ this.runPointer ][0];
+      status = "running[" + lineNr + "]";
+    }
+    else {
+      status = "stopped";
+    }
+
+    if( this.runFlag && this.inputFlag ) {
+      status = "running[" + lineNr + "]/input";
+    }
+    else if( !this.runFlag && this.listFlag ) {
+      status = "stopped/listing";
+    }
+
+    var vlen = Object.getOwnPropertyNames( this.getVars() ).length;
+
+
+    this.statusChanged = false;
+
+    return {
+      status: status,
+      pgmLen: this.program.length,
+      varLen: vlen,
+      displayMode: this.sys.displayMode
+    }
+  }
+
+  dir( path ) {
+    this.sys.dir( this, path );
+    this.startWaitForMessage( "dir" )
+  }
+
+  listfs() {
+    this.sys.listfs( this );
+    this.startWaitForMessage( "listfs" )
+  }
+
+  setfs( path ) {
+    this.sys.setfs( this, path );
+    this.startWaitForMessage( "path" )
+  }
+
+  load( path, start ) {
+    this.sys.load( this, path );
+    this.startWaitForMessage( "load" )
+    this.autoStartAfterLoad = start;
+
+  }
+
+  loaddata( path, type, label ) {
+    this.sys.loaddata( this, path, type, label );
+    this.startWaitForMessage( "loaddata" )
+
+  }
+
+  save( path0 ) {
+
+    var data = this.getProgramAsText();
+    var path = path0;
+    if( path0 == null ) {
+      path = "default.bas";
+    }
+    this.sys.save( this, path, data );
+    this.startWaitForMessage( "save" )
+  }
+
+  deleteFile( path ) {
+
+    this.sys.delete( this, path );
+    this.startWaitForMessage( "delete" )
+  }
+
+
   startWaitForMessage( variable ) {
     this.waitForMessageFlag = true;
     this.waitForMessageVariable = variable;
+  }
+
+
+  keyInterrupt( _type, _data ) {
+    this.interrupt( 0, _type, {} );
+  }
+
+  interrupt( _ix, _type, _data ) {
+
+
+
+    if( _ix == 0 && this.interruptFlag0 ) {
+        return; //allready in an interrupt0
+    }
+
+    if( _ix == 1 && this.interruptFlag1 ) {
+        return; //allready in an interrupt1
+    }
+
+
+    var line, useLabel;
+    if( _ix == 0 ) {
+
+      line = this.handlers.interrupt0;
+      if( line === undefined ) {
+        return;
+      }
+      this.interruptFlag0 = true;
+      useLabel = this.handlers.interrupt0ParamIsLabel;
+    }
+    else {
+
+      line = this.handlers.interrupt1;
+      if( line === undefined ) {
+        return;
+      }
+      this.interruptFlag1 = true;
+      useLabel = this.handlers.interrupt1ParamIsLabel;
+    }
+
+
+    this.newScope( "interrupt" + _ix,
+      { runPointer: this.runPointer, runPointer2: this.runPointer2 } );
+
+    var variables = Object.entries( _data );
+    this.setVar( "itr0$".toUpperCase(), _type.toUpperCase() );
+    for( var i=0; i<variables.length; i++) {
+      this.setVar( variables[i][0].toUpperCase(), variables[i][1] );
+    }
+
+    var pgm = this.program;
+    var len=this.program.length;
+    var found = false;
+
+    if( useLabel ) {
+
+      line = this.labels[line];
+      if( line == undefined ) {
+        throw "@undef'd label";
+      }
+    }
+
+    for( var i=0; i<len; i++) {
+      var l = pgm[i];
+
+      if( l[0] == line ) {
+        this.runPointer = i;
+        this.runPointer2 = 0;
+        found = true;
+        break;
+      }
+    }
+
+    if(!found ) {
+      throw "@invalid interrupt handler";
+    }
+
   }
 
   receiveMessage( _message, _data ) {
@@ -138,14 +368,134 @@ class BasicRuntime {
     this.vars[ this.waitForMessageVariable ] = _message;
     this.waitForMessageFlag = false;
 
-    if( _message == "displaysize" ) {
+    if( _message.startsWith( "displaysize:" )) {
         this.output.reInit( _data.textW, _data.textH );
-        this.output.reInit( _data.bitmapW, _data.bitmapH );
+        this.bitmap.reInit( _data.bitmapW, _data.bitmapH );
+        this.sys.displayMode = _data.mode;
 
-        if( this.runFlag == false ) {
-            this.printReady();
-        }
     }
+    else if( _message == "load:error" ) {
+
+      if( this.runFlag == false ) {
+          this.printError("load", false, undefined, _data.reason );
+      }
+    }
+    else if( _message == "load:completed" ) {
+
+      sys.log("Received 'load:completed' message. Loaded " + _data.pgmData.length + " bytes.." );
+
+      var ok = this.bootPGM( _data.pgmData, _data.path  );
+      sys.log("Parsed program => RUN");
+
+      if( ok && this.autoStartAfterLoad ) {
+        this.output.control( 24 )
+        this.runPGM();
+        sys.log("Program started...");
+      }
+      else {
+        this.stop();
+      }
+    }
+    else if( _message == "loaddata:completed" ) {
+
+      sys.log("Received 'loaddata:completed' message. Loaded " + _data.data.length + " bytes.." );
+      this.insertData( _data.data, _data.type, _data.label  );
+
+    }
+    else if( _message == "loaddata:error" ) {
+
+      sys.log("Received 'loaddata:error' message. Error " + _data.reason );
+
+      this.printError("loaddata", false, undefined, _data.reason );
+      this.stop();
+    }
+    else if( _message == "delete:completed" ) {
+
+      sys.log("Received 'delete:completed' message." );
+
+    }
+    else if( _message == "delete:error" ) {
+
+      sys.log("Received 'delete:error' message. Error " + _data.reason );
+
+      this.printError("delete", false, undefined, _data.reason );
+      this.stop();
+    }
+    else if( _message == "save:completed" ) {
+
+      sys.log("Received 'save:completed' message." );
+
+      if( !this.isRunning() ) {
+      }
+    }
+    else if( _message == "save:error" ) {
+
+      sys.log("Received 'save:error' message. Error " + _data.reason );
+
+      this.printError("save", false, undefined, _data.reason );
+      this.stop();
+    }
+    else if( _message == "dir:completed" ) {
+
+      sys.log("Received 'dir:completed' message." );
+
+      var list = ["","Directory of: \"" + _data.title + "\" on " + _data.fs, "" ];
+
+      for( var i=0; i<_data.files.length; i++) {
+          list.push( _data.files[i].fname );
+      }
+
+      list.push( _data.files.length + " files");
+
+      this.enterListMode( list );
+
+    }
+    else if( _message == "listfs:completed" ) {
+
+      sys.log("Received 'listfs:completed' message." );
+
+      var list = ["", "Default Filesystem: \"" + _data.currentFs + "\"", "", "Devices:", "" ];
+
+      for( var i=0; i<_data.fs.length; i++) {
+          list.push("    \"" + _data.fs[i] + "\"");
+      }
+
+      list.push( "" );
+      list.push( _data.fs.length + " Filesystem Devices Found");
+
+      this.enterListMode( list );
+
+    }
+    else if( _message == "setfs:completed" ) {
+
+      if( !this.isRunning() ) {
+        if( _data.status == "ok" ) {
+        }
+        else {
+          this.printError("file system", false, undefined, "Could not select file system" );
+        }
+
+      }
+      else {
+        if( _data.status != "ok" ) {
+
+          this.printError("file system", false, undefined, "Could not select file system" );
+          this.stop();
+        }
+      }
+    }
+
+    if( this.stopAfterMessage ) {
+      this.stopAfterMessage = false;
+      this.runFlag = false;
+      this.HandleStopped( false );
+
+    }
+
+    if( !this.isRunning() && this.listFlag == false ) {
+      this.printReady();
+    }
+
   }
 
   stop() {
@@ -162,30 +512,59 @@ class BasicRuntime {
     if( this.runFlag == true ) {
       if( e.keyLabel == "Enter" ) {
 
+        var cxy = this.output.getCursorPos();
+
+        var string = this.output.getLineFrom( this.inputStartInputPosX, cxy[1]);
         this.output.writeln("");
-        this.handleLineInput( this.lineInput, true );
-        this.lineInput = "";
+
+        this.handleLineInput( string, true );
       }
       else if( e.keyLabel == "Backspace" ||
               e.keyLabel == "Delete"  ) {
         var x = this.output.getCursorPos()[0];
-        if( x>0) {
-            if( this.lineInput.length > 0 ) {
-                this.output.backspace();
-                this.lineInput = this.lineInput.substr(0,this.lineInput.length-1)
-            }
 
+        if( e.keyLabel == "Delete" ) {
+              this.output.delete();
+        }
+        else {
+            if( x > this.inputStartInputPosX ) {
+                this.output.backspace();
+            }
+            else {
+              this.output.delete();
+            }
+        }
+
+      }
+      else if( e.keyLabel == "ArrowLeft" && !e.ctrlKey) {
+        var cx = this.output.getCursorPos();
+        if( cx[0] > this.inputStartInputPosX ) {
+          this.output.cursorMove("left");
         }
       }
-      else if( e.keyLabel == "ArrowLeft" ) {
-        this.output.cursorMove("left");
-      }
-      else if( e.keyLabel == "ArrowRight" ) {
+      else if( e.keyLabel == "ArrowRight" && !e.ctrlKey) {
         this.output.cursorMove("right");
+      }
+      else if( e.keyLabel == "Home" && !e.ctrlKey ) {
+        var xy = this.output.getCursorPos();
+
+        this.output.setCursorPos( this.inputStartInputPosX, xy[1]);
+      }
+      else if( (e.keyLabel == "ArrowRight" && e.ctrlKey)) {
+        this.output.jumpTo("text-end");
+      }
+      else if( e.keyLabel == "End" ) {
+        this.output.jumpTo("text-end-all");
+      }
+      else if( (e.keyLabel == "ArrowLeft" && e.ctrlKey) ) {
+        this.output.jumpTo("text-start");
+        var xy = this.output.getCursorPos();
+        if( xy[0]< this.inputStartInputPosX ) {
+          this.output.setCursorPos( this.inputStartInputPosX, xy[1] );
+        }
       }
       else {
         if( e.key != null ) {
-          this.lineInput += e.key;
           this.output.write( e.key );
         }
       }
@@ -195,13 +574,30 @@ class BasicRuntime {
     }
   }
 
-  HandleStopped() {
+  toggleMenu()  {
+    this.menuEnable = !this.menuEnable;
+
+    if( this.menuEnable ) {
+      this.sys.signalHideMenu( false );
+    }
+    else {
+      this.sys.signalHideMenu( true );
+    }
+  }
+
+  HandleStopped( startingProgram ) {
 
     this.input.setInterActive( true);
+    this.input.flush();
+    if( !startingProgram && this.menuEnable ) {
+      this.sys.signalHideMenu( false );
+    }
+
+    this.flagStatusChange();
   }
 
   importPGMHandler( content, filename ) {
-    var pgm = this.textLinesToBas( content.split("\n") );
+    var pgm = this.textLinesToBas( content.split("\n") ).pgm;
     this.fileName = filename;
 
     this.program = pgm;
@@ -210,7 +606,7 @@ class BasicRuntime {
 
   bootPGM( content, filename ) {
     try {
-      var pgm = this.textLinesToBas( content.split("\n") );
+      var pgm = this.textLinesToBas( content.split("\n") ).pgm;
       this.fileName = filename;
 
       this.program = pgm;
@@ -222,9 +618,9 @@ class BasicRuntime {
     catch ( e ) {
       var tmp = 1;
 
-      var pgm = this.textLinesToBas( "" );
+      var pgm = this.textLinesToBas( "" ).pgm;
       this.program = pgm;
-      this.HandleStopped();
+      this.HandleStopped( false );
       this.printError("parsing syntax", false, e.lineNr, e.detail );
       this.printReady();
       return false;
@@ -253,7 +649,9 @@ class BasicRuntime {
     this.listFlag = true;
     this.list = list;
     this.listPointer = 0;
+    this.printLine("");
     this.input.setInterActive( false );
+    this.flagStatusChange();
   }
 
   setExitMode( v ) {
@@ -286,11 +684,13 @@ class BasicRuntime {
   setProgram( pgm ) {
     this.program = pgm;
     this.runFlag = false;
-    this.HandleStopped();
+    this.HandleStopped( true );
 
     this.inputFlag = false;
     this.listFlag = false;
-    //this.output.clearCursor();
+
+    this.flagStatusChange();
+
   }
 
   appendProgram( pgm ) {
@@ -319,7 +719,7 @@ class BasicRuntime {
     this.program.sort( sortF );
 
     this.runFlag = false;
-    this.HandleStopped();
+    this.HandleStopped( false );
 
     this.inputFlag = false;
     this.listFlag = false;
@@ -344,35 +744,13 @@ class BasicRuntime {
 
   setProgramState( pgmState ) {
       this.runFlag = pgmState.runFlag;
-      this.HandleStopped();
+      this.HandleStopped( false );
       this.inputFlag = pgmState.inputFlag;
       this.vars = pgmState.vars;
       this.functions = pgmState.functions;
       this.forContext = pgmState.forContext;
       this.runPointer = pgmState.runPointer;
       this.runPointer2 = pgmState.runPointer2;
-  }
-
-
-  updateEditMode() {
-
-
-    if( !this.runFlag && !this.listFlag && ! this.executeLineFlag ) {
-      this.setEditModeCallBacks( "edit" );
-      return;
-    }
-    else if( this.listFlag ) {
-      this.setEditModeCallBacks( "edit" );
-      return;
-    }
-    else if( this.runFlag && this.inputFlag ) {
-      this.setEditModeCallBacks( "edit" );
-      return;
-    }
-    else if( this.runFlag || this.executeLineFlag ) {
-      this.setEditModeCallBacks( "print" );
-      return;
-    }
   }
 
   _setByteBits( bits ) {
@@ -407,16 +785,24 @@ class BasicRuntime {
    return results;
   }
 
+  upperFirst( s ) {
+    if( s ) {
+      if ( s.length > 1 ) {
+          return s.substr(0,1).toUpperCase() + s.substr( 1 );
+      }
+    }
+    return s;
+  }
+
   printError( s, supressLine, explicitline, detail ) {
 
-    var line1 = ("?" + s + " error" + this.onLineStr());
+    var line1 = ("?" + this.upperFirst( s ) + " error" + this.onLineStr());
 
     if( explicitline ) {
-        line1 = ( ("?" + s + " error in " + explicitline ) );
+        line1 = ( ("?" + this.upperFirst( s ) + " error in " + explicitline ) );
     }
     if( supressLine ) {
-
-        line1 = ( ("?" + s + " error") );
+        line1 = ( ("?" + this.upperFirst( s ) + " error") );
     }
 
     this.output.writeln(  line1 );
@@ -432,22 +818,47 @@ class BasicRuntime {
 
   }
 
+  printHelp() {
+    this.extendedcommands["_stat_help"]([]);
+  }
+
   printLine( s ) {
-    this.output.writeln(s.toUpperCase());
+    this.output.writeln(s);
     this.reverseOn = false;
   }
+
 
   print( s ) {
-    this.output.writeln(s.toUpperCase());
+    this.output.writeln(s);
     this.reverseOn = false;
   }
 
 
-  clearScreen() {
-    this.output.clearScreen();
-    this.output.cursorHome();
+//{ fg: 5, bg:1, border: 7 }
+  colorReset( colors ) {
+    this.output.setDefault( colors.fg, colors.bg );
+    this.output.control( 18, colors.border );
+    this.output.colorReset();
   }
 
+  resetConsole() {
+    var wh = this.output.getDimensions();
+
+    //this.output.textArea(  wh[0], wh[1], -1, -1 );
+
+    this.output.reset();
+    //this.output.setPos(0,0);
+  }
+
+  clearScreen() {
+    this.output.clear();
+    this.output.setPos(0,0);
+  }
+
+  getMillis() {
+    var millis=new Date().getTime() - this.nullTime;
+    return millis;
+  }
 
   getJiffyTime() {
     var millis=new Date().getTime() - this.nullTime;
@@ -471,7 +882,7 @@ class BasicRuntime {
 
   reset( hard, muteReady ) {
     this.output.clearScreen();
-    this.output.writel("ready.");
+    this.output.writel("Ready.");
 
     this.inputFlag = false;
     this.runFlag = false;
@@ -511,6 +922,9 @@ class BasicRuntime {
     return text;
   }
 
+  getProgramSize() {
+    return this.program.length;
+  }
 
   getProgramAsText() {
     var text = "";
@@ -519,7 +933,11 @@ class BasicRuntime {
         if( text != "") {
           text += "\n";
         }
-        text +=  this.prepareLineForExport( l[2].trim() );
+        //text +=  this.prepareLineForExport( l[2].trim() );
+        if( l[1][0].type == "control" && l[1][0].controlKW == "sub" ) {
+            text += "\n";
+        }
+        text += l[2].trim();
       }
     return text;
   }
@@ -531,7 +949,7 @@ class BasicRuntime {
 
     for( var i=0; i<txt.length; i++) {
       var c = txt.charCodeAt( i );
-      if( c<31 || c==92 || c>=94 ) {
+      if( c<31 || c==92 || c>=126 ) {
         var symdef = this.symbolTableBM[ c ];
         if( ! ( symdef === undefined ) ) {
             dst += "{" + symdef + "}";
@@ -716,7 +1134,7 @@ class BasicRuntime {
     }
     else if( p.type=="var" ) {
       if(p.data.startsWith("TI")) {
-        val = this.getJiffyTime();
+        val = this.getMillis();
         if(p.data.endsWith("$")) {
           val = this.getTime();
           val = "" +
@@ -739,6 +1157,9 @@ class BasicRuntime {
       }
       if( val == undefined ) {
         val = 0;
+        if( this.scopes[0].vars[ p.data ] ) {
+          val = this.scopes[0].vars[ p.data ];
+        }
       }
     }
     else if( p.type=="array" ) {
@@ -746,7 +1167,12 @@ class BasicRuntime {
       var arr = this.vars[ varIntName ];
 
       if( arr === undefined ) {
-        throw "@no such array@Array '"+ varIntName+"' does not exist";
+        if( this.scopes[0].vars[ varIntName ] ) {
+          arr = this.scopes[0].vars[ varIntName ];
+        }
+        if( arr === undefined ) {
+          throw "@no such array@Array '"+ varIntName+"' does not exist";
+        }
       }
 
       if( arr.getIndexCount() != p.indices.length ) {
@@ -875,6 +1301,9 @@ class BasicRuntime {
         }
         val /= this.evalExpressionPart( p );
       }
+      else if( p.op == "%" ) {
+        val %= this.evalExpressionPart( p );
+      }
       else if( p.op == ";" ) {
         val += ("" + this.evalExpressionPart( p ));
       }
@@ -945,7 +1374,7 @@ class BasicRuntime {
   }
 
   exitInputState() {
-    var c = this.output;
+    var con = this.output;
     var p = this.program;
 
     this.inputFlag = false;
@@ -994,10 +1423,10 @@ class BasicRuntime {
 
         this.runFlag = false;
 
-        this.HandleStopped();
-        c.clearCursor();
+        this.HandleStopped( false );
+        //con.clearCursor();
         this.printLine("");
-        this.printLine("ready.");
+        this.printReady();
 
       }
 
@@ -1009,6 +1438,8 @@ class BasicRuntime {
   breakCycle() {
     this.breakCycleFlag = true;
   }
+
+
 
   cycle() {
 
@@ -1023,13 +1454,14 @@ class BasicRuntime {
     var c = this.output;
 
     var cmdCount = this.cmdCountPerCycle;
-
-
-
+    var lineNumber = -1;
     try {
 
       if( this.bitmap.isActive() ) {
         this.bitmap.triggerFlush();
+      }
+      if( this.output.isActive() && this.output.changeCount() > 0) {
+        this.output.triggerFlush();
       }
 
       if( !this.runFlag ||
@@ -1045,6 +1477,7 @@ class BasicRuntime {
            }
            if (  this.listPointer >= this.list.length ){
              this.listStop();
+             this.flagStatusChange();
            }
 
         }
@@ -1053,24 +1486,51 @@ class BasicRuntime {
 
         if(this.debugFlag) console.log("START CYCLE------------------------------" );
 
-        if( this.waitForMessageFlag ) {
-            return;
-        }
-
         var p = this.program;
 
         while (true) {
+
+
+          if( this.waitForMessageFlag ) {
+              return this.statusChanged;
+          }
 
           if( this.breakCycleFlag ) {
             this.breakCycleFlag = false;
             break;
           }
+
           if(this.debugFlag) console.log("START CYCLE LOOP-------------" );
           var l = p[ this.runPointer ];
+          lineNumber = l[0];
+
+          if( l === undefined ) {
+            var t=1;
+          }
           var bf = this.runPointer2;
           if(this.debugFlag) console.log(" this.runPointer = " + this.runPointer, " this.runPointer2 = " + this.runPointer2 );
           if(this.debugFlag) console.log(" cmdCount = " + cmdCount);
           var rv = this.runCommands( l[1], cmdCount );
+
+          if(! ( this.traceVars === undefined )) {
+              for( var tvi=0; tvi<this.traceVars.length; tvi++) {
+                var thisVar = this.traceVars[ tvi ];
+                var thisValue = this.vars[ thisVar ];
+                var oldValue = this.traceOldValues[ thisVar ];
+
+                if( ! ( thisValue === undefined )) {
+                  if( oldValue != thisValue ) {
+                    this.traceList.push(
+                      "TRC(" + lineNumber + ") " + thisVar + "=" + thisValue
+                    );
+
+                    this.traceOldValues[ thisVar ] = thisValue;
+                  }
+
+                }
+              }
+          }
+
           //console.log(" rv = ", rv);
           var af = rv[ 1 ];
 
@@ -1094,15 +1554,17 @@ class BasicRuntime {
               e = rv[3];
             }
             this.printLine("");
-            this.printLine("ready.");
-            this.HandleStopped();
+            this.printReady();
+            this.HandleStopped( false );
             if( rv[0] == END_W_ERROR ) {
+
+              this.setVar("LINE", lineNumber );
               console.log("ERROR: ", e, " LINE ", this.retreiveRuntimeLine() );
               console.log("PARAMETER DUMP:", this.vars );
               console.log("FUNCTION DUMP:", this.functions );
             }
             if(this.debugFlag) console.log("CYCLE RETURN END");
-            return;
+            return this.statusChanged;
           }
           else if( rv[0] == LINE_FINISHED ) {
             this.runPointer ++;
@@ -1111,10 +1573,17 @@ class BasicRuntime {
 
             if( this.runPointer >=  p.length ) {
               if(this.debugFlag) console.log( "end program");
-              this.runFlag = false;
-              this.HandleStopped();
 
-              this.printLine("ready.");
+              this.setVar("LINE", lineNumber );
+
+              if( !this.waitForMessageFlag ) {
+                this.runFlag = false;
+                this.HandleStopped( false );
+                this.printReady();
+              }
+              else {
+                this.stopAfterMessage = true;
+              }
               break;
             }
           }
@@ -1146,22 +1615,49 @@ class BasicRuntime {
     catch (e) {
       //c.clearCursor();
 
+      sys.log("DEBUG: ", typeof e );
+
+      this.setVar("LINE", lineNumber );
+
+
+
       if( this.erh.isSerializedError( e ) ) {
         var err = this.erh.fromSerializedError( e );
+
+        this.setVar("ERR", err.clazz );
+        this.setVar("ERRDETAIL", err.detail  );
+
         this.printError( err.clazz, undefined, undefined, err.detail );
       }
       else {
-        this.printError("unexpected");
+        var err = this.erh.fromSimpleExternalError( e, undefined, undefined );
+
+        if( err ) {
+
+            this.setVar("ERR", err.clazz );
+            this.setVar("ERRDETAIL", err.detail  );
+            this.printError( err.clazz, undefined, undefined, err.detail );
+        }
+        else {
+
+            this.setVar("ERR", "unexpected" );
+            this.setVar("ERRDETAIL", "unexpected"  );
+            this.printError( "unexpected", undefined, undefined, e );
+        }
+
       }
 
-      this.printLine("ready.");
+      this.printReady();
       this.runFlag = false;
+      this.HandleStopped( false );
 
       sys.log("ERROR: ", e, " LINE ", this.retreiveRuntimeLine() );
       sys.log("PARAMETER DUMP:", this.vars );
       sys.log("FUNCTION DUMP:", this.functions );
 
     }
+
+    return this.statusChanged;
   }
 
   doReturn() {
@@ -1177,12 +1673,41 @@ class BasicRuntime {
     //this.goto( oldLine );
   }
 
-  gosub( line, runPointer2 ) {
+
+  doInterruptReturn() {
+
+    if( this.scope.name == "interrupt0" ) {
+      this.interruptFlag0 = false; // TODO interrupt, take from scope which flag
+    }
+    else {
+      this.interruptFlag1 = false; // TODO interrupt, take from scope which flag
+    }
+
+    this.runPointer = this.scope.data.runPointer;
+    this.runPointer2 = this.scope.data.runPointer2;
+
+    this.closeScope();
+
+  }
+
+
+
+
+  gosub( line0, runPointer2 ) {
+
 
     var pgm = this.program;
     var len=this.program.length;
     var retLine = null;
     var retCmd = null;
+
+    var line = line0;
+    if( (typeof line0).toLowerCase() == "string" ) {
+      line = this.labels[line0];
+      if( line == undefined ) {
+        throw "@undef'd label";
+      }
+    }
 
     this.runPointer2 = runPointer2;
 
@@ -1213,11 +1738,12 @@ class BasicRuntime {
     var found = false;
     var line;
 
-    if( (typeof line0) == "number" ) {
-        line = line0;
-    }
-    else {
-        line = this.evalExpression( line0 );
+    line = line0;
+    if( (typeof line0).toLowerCase() == "string" ) {
+      line = this.labels[line0];
+      if( line == undefined ) {
+        throw "@undef'd label";
+      }
     }
 
     for( var i=0; i<len; i++) {
@@ -1244,8 +1770,9 @@ class BasicRuntime {
     if( this.listFlag ) {
       var c = this.output;
       this.listFlag = false;
-      this.HandleStopped();
-      this.printLine( "ready.");
+      this.HandleStopped( false );
+      this.printLine( "" );
+      this.printReady();
     }
   }
 
@@ -1254,11 +1781,19 @@ class BasicRuntime {
     if( this.runFlag ) {
       var c = this.output;
       this.runFlag = false;
-      this.HandleStopped();
+      this.handlers.interrupt0 = undefined;
+      this.handlers.interrupt1 = undefined;
+
+      this.HandleStopped( false );
 
       console.log( "break in " + this.program[ this.runPointer ][0] );
+
+      this.setVar( "LINE", this.program[ this.runPointer ][0] );
+      this.setVar("ERR", "BREAK" );
+
+      this.printLine("");
       this.printLine( "break in " + this.program[ this.runPointer ][0]);
-      this.printLine( "ready.");
+      this.printReady();
     }
   }
 
@@ -1274,6 +1809,26 @@ class BasicRuntime {
     return this.inputFlag;
   }
 
+  isReady() {
+    return !this.runFlag && !this.listFlag && ! this.executeLineFlag;
+  }
+
+
+  getDataBlocks() {
+    var list = [];
+
+    var mapInfo = Object.entries( this.loadedData );
+    for( var i=0; i<mapInfo.length; i++) {
+      if( mapInfo[i][1].length > 0) {
+        list.push( mapInfo[i][0] + ": " + mapInfo[i][1].length  );
+      }
+
+    }
+
+    return list;
+
+  }
+
   readData() {
 
     if( this.dataPointer >= this.data.length ) {
@@ -1287,23 +1842,84 @@ class BasicRuntime {
   }
 
 
+  getDataLength() {
+
+    return this.data.length;
+
+  }
+
+  setData( label0 ) {
+    var label = label0;
+    if( ! label ) {
+      label = "default";
+    }
+
+    this.data = this.loadedData[ label ];
+    this.dataPointer = 0;
+
+  }
+
+  insertData( data, type, label0 ) {
+
+    //this.loadedData = { default: [] };
+    var label = label0;
+    if( ! label ) {
+      label = "default";
+    }
+    this.loadedLabel = label;
+    this.dataPointer = 0;
+
+    var arr = [];
+    this.loadedData[label ] = arr;
+
+    var typeParts = type.split(":");
+    var typeData = typeParts[0].toUpperCase();
+    var dataSyntax = typeParts[1].toUpperCase();
+
+    this["parseSimpleData" + typeData + "_" + dataSyntax]( data, arr );
+
+    this.data = arr;
+  }
+
+
+  parseSimpleDataI_CSV( data, toArr ) {
+    var data2 = data.replaceAll(" ","").replaceAll("\t","").replaceAll("\r","").replaceAll("\n","");
+    data2 = data2.split(",");
+    for( var i=0; i<data2.length; i++) {
+      toArr.push( data2[ i ] );
+    }
+
+  }
+
+
+  parseSimpleDataS_CSV( data, toArr ) {
+    var data2 = data.replaceAll(" ","").replaceAll("\t","").replaceAll("\r","").replaceAll("\n","");
+    data2 = data2.split(",");
+    for( var i=0; i<data2.length; i++) {
+      toArr.push( data2[ i ] );
+    }
+
+  }
+
+  parseSimpleDataS_LINES( data, toArr ) {
+    var data2;
+    data2 = data.split("\n");
+    for( var i=0; i<data2.length; i++) {
+      toArr.push( data2[ i ] );
+    }
+
+  }
+
   printChar( c  ) {
     this.output.write( c );
   }
 
   listCodeLine( rawLine ) {
+    if( rawLine === undefined ) {
+        this.printLine( "???" );
+        return;
+    }
 
-    var inString = false;
-/*    for( var i=0; i<rawLine.length; i++ ) {
-
-      var c = rawLine.charAt(i);
-
-      this.printChar( c );
-
-      if( c == "\"" ) {
-        inString = !inString;
-      }
-    }*/
     this.printLine( rawLine );
 
   }
@@ -1323,6 +1939,7 @@ class BasicRuntime {
     if( ! ( renumbering === undefined )) {
 
       var foundGoto = false;
+      var foundGotoIndex = 0;
       for( i = 0; i<tokens.length; i++) {
         if( tokens[i].type == "name" && (tokens[i].data == "GOTO" || tokens[i].data == "GOSUB") ) {
           foundGoto = true;
@@ -1332,14 +1949,16 @@ class BasicRuntime {
                 tokens[i-1].type == "pad" &&
                 tokens[i-2].type == "name" && tokens[i-2].data == "THEN" ) {
               foundGoto = true;
+              foundGotoIndex = i;
             }
             else if( tokens[i].type == "num" && tokens[i-1].type == "name" && tokens[i-1].data == "THEN" ) {
               foundGoto = true;
+              foundGotoIndex = i;
             }
           }
         }
 
-        if( tokens[i].type == "num" && foundGoto ) {
+        if( tokens[i].type == "num" && foundGoto &&  i == (foundGotoIndex + 1)) {
           var newLine = renumbering[ "old_" + tokens[i].data ];
           if( newLine == undefined ) { newLine = 99999;}
           tokens[i].data =newLine;
@@ -1421,6 +2040,18 @@ class BasicRuntime {
     return false;
   }
 
+  lineIsSub( line ) {
+    console.log( line );
+    if( line[1].length == 1 ) {
+      if( ! ( line[1][0].controlKW === undefined) ) {
+        if( line[1][0].controlKW.toUpperCase() == "SUB" ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   renumberProgram( start, gap ) {
 
     var p = this.program;
@@ -1429,7 +2060,7 @@ class BasicRuntime {
     var renumbering = {};
     var lineNumbers = [];
 
-    var method = "rem";
+    var method = "sub";
 
     if( method  == "plain" ) {
       for( var i=0; i<p.length; i++) {
@@ -1500,7 +2131,27 @@ class BasicRuntime {
       }
 
     }
+    else if( method  == "sub" ) {
+      // non data
+      for( var i=0; i<p.length; i++) {
+          var line = p[ i ];
+          var rem = this.lineIsSub( line );
 
+          if( rem ) {
+            var kNumber = Math.ceil( newLineNr / 1000 );
+            var newLineNr2 = 1000 * ( kNumber  );
+            if( newLineNr2 - newLineNr  < 100 ) {
+              newLineNr2+=1000;
+            }
+            newLineNr = newLineNr2;
+          }
+          renumbering["old_" + line[0]] = newLineNr;
+          lineNumbers.push( newLineNr );
+          newLineNr += gap;
+
+      }
+
+    }
     //newLineNr = start;
     for( var i=0; i<p.length; i++) {
         newLineNr = lineNumbers[ i ]
@@ -1558,26 +2209,43 @@ class BasicRuntime {
   }
 
   clrPGM() {
-    this.vars = [];
+    this.vars = {};
     this.functions = [];
     this.restoreDataPtr();
   }
 
   restoreDataPtr() {
     this.dataPointer = 0;
+    this.data = this.loadedData[ "default" ];
+  }
+
+  normalizeData( dataRec ) {
+    var data = dataRec.data;
+
+    if( dataRec.type == "num" ) {
+      if( (typeof data).toLowerCase() == "string" ) {
+        data = parseInt( data );
+      }
+    }
+    else {
+      if( (typeof data).toLowerCase() == "number" ) {
+        data = "" + data ;
+      }
+    }
+
+    return data;
   }
 
   runPGM() {
 
     this.executeLineFlag = false;
-
+    this.stopAfterMessage = false;
 
     if( this.startAsGoto ) {
         this.startAsGoto = false;
 
         var bak1 = this.runPointer;
         var bak2 = this.runPointer2;
-
 
         this.runPGM();
 
@@ -1589,14 +2257,24 @@ class BasicRuntime {
     }
 
     this.input.setInterActive( false);
+    this.input.flush();
 
     var c = this.output;
     var p = this.program;
-    this.data = [];
-    this.dataPointer = 0;
+
+    this.loadedData[ "default" ] = [];
+    this.restoreDataPtr();
+
     this.gosubReturn = [];
-    this.vars = [];
+    this.scopes = [];
+    this.newScope( "global", {} );
     this.functions = [];
+    this.handlers = {}
+    this.labels = {};
+    this.traceList = [];
+    this.traceOldValues = {};
+
+    var normalize = this.normalizeData;
 
     for( var i=0; i<p.length; i++) {
 
@@ -1609,8 +2287,22 @@ class BasicRuntime {
 
           if( command.type  == "control" && command.controlKW == "data") {
             for( var k=0; k<command.params.length; k++) {
-              this.data.push( command.params[k] );
+              this.loadedData[ "default" ].push( normalize( command.params[k] ) );
             }
+          }
+          else if( command.type  == "control" && command.controlKW == "on") {
+            if( command.params[0] == "interrupt1") {
+              this.handlers.interrupt1 = command.params[1];
+              this.handlers.interrupt1ParamIsLabel = command.label;
+            }
+            else if( command.params[0] == "interrupt0") {
+              this.handlers.interrupt0 = command.params[1];
+              this.handlers.interrupt0ParamIsLabel = command.label;
+            }
+          }
+          else if( command.type  == "control" && command.controlKW == "sub") {
+            var label = command.label;
+            this.labels[ label ] = parseInt(line[0]);
           }
         }
     }
@@ -1623,19 +2315,32 @@ class BasicRuntime {
     if( this.program.length > 0) {
       this.runFlag = true;
       this.inputFlag = false;
-      //c.clearCursor();
       this.runPointer = 0;
       this.runPointer2 = 0;
+      this.waitForMessageFlag = false;
+      this.interruptFlag0 = false;
+      this.interruptFlag1 = false;
+
     }
     else {
       this.runFlag = false;
       this.inputFlag = false;
       this.runPointer = 0;
       this.runPointer2 = 0;
+      this.waitForMessageFlag = false;
+      this.interruptFlag0 = false;
+      this.interruptFlag1 = false;
       this.input.setInterActive( true);
-      this.printReady();
     }
+
+    this.flagStatusChange();
   }
+
+  getVars() {
+    return this.vars;
+  }
+
+
 
 
   doForInit( from, to, step, varName, cmdPointer, cmdArrayLen, linePointersLen ) {
@@ -1807,7 +2512,12 @@ class BasicRuntime {
       var cmd=cmds[i];
 
       var l=this.program[this.runPointer];
-
+      if( l ) {
+        //console.log( l[0] );
+        if(parseInt(l[0]) == 3155 ) {
+          console.log("bump");
+        }
+      }
       //if( this.runPointer > -1 ) {
       //  console.log( l[0] + "(" + this.runPointer + ":" + i +")" + this.commandToString( cmd ) );
       //}
@@ -1832,25 +2542,37 @@ class BasicRuntime {
         }
         else if( cn == "on" ) {
           var onCommand = cmd.params[ 0 ];
-          var onExpr = cmd.params[ 1 ];
-          var onLineNrs = cmd.params[ 2 ];
 
-          var value = this.evalExpression( onExpr );
-          if( (value-1)>=0 && (value-1)<onLineNrs.length ) {
-            if( onCommand == "goto" ) {
-              this.goto( onLineNrs[ (value-1) ] );
-              return [TERMINATE_W_JUMP,i+1,cnt+1];
-            }
-            else if( onCommand == "gosub" ) {
-              this.gosub( onLineNrs[ (value-1) ], i );
-              return [TERMINATE_W_JUMP,i+1,cnt+1];
+          if( onCommand != "interrupt0"  && onCommand != "interrupt1" ) {
+            var onExpr = cmd.params[ 1 ];
+            var onLineNrs = cmd.params[ 2 ];
+
+            var value = this.evalExpression( onExpr );
+            if( (value-1)>=0 && (value-1)<onLineNrs.length ) {
+              if( onCommand == "goto" ) {
+                this.goto( onLineNrs[ (value-1) ] );
+                return [TERMINATE_W_JUMP,i+1,cnt+1];
+              }
+              else if( onCommand == "gosub" ) {
+                this.gosub( onLineNrs[ (value-1) ], i );
+                return [TERMINATE_W_JUMP,i+1,cnt+1];
+              }
             }
           }
 
           //if not jumping, do nothing
         }
         else if( cn == "return" ) {
-          this.doReturn();
+
+          if( this.interruptFlag0 || this.interruptFlag1) {
+
+            this.doInterruptReturn();
+
+          }
+          else {
+            this.doReturn();
+          }
+
           return [TERMINATE_W_JUMP,i+1,cnt+1];
         }
         else if( cn == "if" ) {
@@ -1870,6 +2592,9 @@ class BasicRuntime {
           //Nothing
         }
         else if( cn == "rem" ) {
+          return [LINE_FINISHED,i+1,cnt+1];
+        }
+        else if( cn == "sub" ) {
           return [LINE_FINISHED,i+1,cnt+1];
         }
         else if( cn == "for:init" ) {
@@ -1937,7 +2662,6 @@ class BasicRuntime {
         var values = [];
         var pardefs = [];
         var mycommands = commands;
-
         var stc = mycommands[ "_stat_" + cmd.statementName.toLowerCase()];
 
         if( stc === undefined ) {
@@ -2009,11 +2733,11 @@ class BasicRuntime {
 
           if( this.erh.isSerializedError( e ) ) {
             var err = this.erh.fromSerializedError( e );
-            this.printError( err.clazz );
+            this.printError( err.clazz, false, false, err.detail );
           }
           else if( this.erh.isError( e ) ) {
             var err = e;
-            this.printError( err.clazz );
+            this.printError( err.clazz, false, false, err.detail );
           }
           else {
             this.printError("unexpected " + e );
@@ -2094,15 +2818,48 @@ class BasicRuntime {
 
   }
 
+  newScope( name, data ) {
+    var scope = { name: name, vars: {}, data: data };
+    this.scopes.push( scope );
+    this.vars = scope.vars;
+    this.scope = scope;
+  }
+
+  closeScope() {
+    this.scopes.pop();
+    this.vars = this.scopes[ this.scopes.length - 1 ].vars;
+  }
+
   setVar( a, b ) {
     this.vars[ a ] = b;
   }
 
-  old( linenr ) {
+  getTraceList() {
+    if( this.traceList === undefined ) {
+      return [];
+    }
+
+    return this.traceList;
+  }
+
+  setTraceVar( v ) {
+    if( this.traceVars === undefined ) {
+        this.traceVars = [];
+    }
+    this.traceVars.push( v.toUpperCase() );
+
+  }
+
+  resetTraceVar( v ) {
+    this.traceVars = undefined;
+  }
+
+
+  old( ) {
     this.program = this.oldProgram;
   }
 
-  new( linenr ) {
+  new( ) {
     this.oldProgram = this.program ;
     this.program = [];
   }
@@ -2139,12 +2896,12 @@ class BasicRuntime {
   }
 
 
-  insertPgmLine( linenr, commands, raw ) {
+  insertPgmLine( linenr, commands, handlers, raw ) {
 
-    this.insertPgmLineLocal( linenr, commands, raw, this.program );
+    this.insertPgmLineLocal( linenr, commands, handlers, raw, this.program );
   }
 
-  insertPgmLineLocal( linenr, commands, raw, myProgram ) {
+  insertPgmLineLocal( linenr, commands, handlers, raw, myProgram ) {
 
     for( var i=0; i<myProgram.length; i++) {
       var pl=myProgram[i];
@@ -2154,7 +2911,7 @@ class BasicRuntime {
       }
     }
 
-    myProgram.push( [linenr, commands, raw.trim() ]);
+    myProgram.push( [linenr, commands, raw.trim(), handlers ]);
 
     var sortF = function compare( a, b ) {
       return a[0] - b[0];
@@ -2167,6 +2924,7 @@ class BasicRuntime {
   textLinesToBas( lines ) {
 
     var myProgram = [];
+    var exception = undefined;
 
     if( this.debugFlag ) {
       console.log( "textLinesToBas" );
@@ -2176,16 +2934,32 @@ class BasicRuntime {
       var line = this.prepareLineForImport( lines[ i ] );
       var p = new Parser( this.commands, this.extendedcommands );
       p.init();
-      //if( line.length > 80 ) {  TODO move this check into the parser
-      //  throw "Line to long " + line;
-      //}
-      var l = p.parseLine( line );
+
+      var l = null;
+
+      try {
+          l = p.parseLine( line );
+      }
+      catch ( e ) {
+        if( exception === undefined ) {
+            exception = e;
+        }
+
+        try {
+          l = p.parseErrorLine( line );
+        }
+        catch ( e ) {
+            this.printError( "unexpected text (at "+i+")", true );
+            console.log("Illegal Line: ", line );
+        }
+      }
+
       if( l == null ) {
         continue;
       }
       if( l.lineNumber != -1 ) {
         if( l.commands.length > 0) {
-          this.insertPgmLineLocal( l.lineNumber, l.commands, l.raw, myProgram);
+          this.insertPgmLineLocal( l.lineNumber, l.commands, l.handlers, l.raw,  myProgram);
           //this.program[ l.lineNumber ] = [l.commands,l.raw];
         }
         else {
@@ -2201,11 +2975,11 @@ class BasicRuntime {
         console.log("Line: ", l );
       }
     }
-    return myProgram;
+    return { pgm: myProgram, exception: exception };
   }
 
   printReady() {
-    this.printLine("ready.");
+    this.printLine("Ready.");
   }
 
 
@@ -2219,8 +2993,9 @@ class BasicRuntime {
     this.input.setInterActive( true);
     this.inputVarsPointer = 0;
     this.output.write( "? ");
-    this.lineInput = "";
+    this.inputStartInputPosX = this.output.getCursorPos()[0];
     this.sys.blinkMode( true );
+    this.flagStatusChange();
 
   }
 
@@ -2303,7 +3078,7 @@ class BasicRuntime {
       else {
         this.printError( "syntax", true );
       }
-      this.printLine("ready.");
+      this.printReady();
     }
     if( l == null ) {
       if( this.debugFlag ) {
@@ -2316,7 +3091,7 @@ class BasicRuntime {
 
     if( l.lineNumber != -1 ) {
       if( l.commands.length > 0) {
-        this.insertPgmLine( l.lineNumber, l.commands, l.raw);
+        this.insertPgmLine( l.lineNumber, l.commands, l.handlers, l.raw);
       }
       else {
         this.removePgmLine( l.lineNumber  );
@@ -2350,8 +3125,8 @@ class BasicRuntime {
         this.runFlag = false;
       }
 
-      if( ! this.runFlag && ! this.listFlag) {
-        this.printLine("ready.");
+      if( ! this.runFlag && ! this.listFlag && !this.waitForMessageFlag) {
+        this.printReady();
       }
 
     }

@@ -53,7 +53,7 @@ class Tokenizer {
 
 	isOpChar( ctx ) {
 
-		var rv = ctx.c.match("[+]|[-]|[*]|[/]|[\\^]|[;]") != null;
+		var rv = ctx.c.match("[+]|[-]|[*]|[/]|[\\%]|[\\^]|[;]") != null;
 
 		return [rv,0];
 
@@ -81,7 +81,19 @@ class Tokenizer {
 		}
 		var rv = ctx.c.match("[a-zA-Z0-9$%?]") != null;
 
-		if( ctx.c=="$" || ctx.c== "%") {
+		if( ctx.c== "%" ) {
+				rv = false;
+				if( ctx.prev != null ) {
+					var varNameChar = ctx.prev.match("[a-zA-Z0-9]") != null;
+					if( varNameChar ) {
+						ctx.endFound = true;
+						rv = true;
+					}
+				}
+		}
+
+
+		if( ctx.c=="$" ) {
 			ctx.endFound = true;
 		}
 

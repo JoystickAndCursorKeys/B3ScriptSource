@@ -1,7 +1,7 @@
 //src/sys/modules/basic/worker/sys.js
 //src/sys/modules/basic/worker/basicarray.js
 //src/sys/modules/basic/worker/basicerrorhandler.js
-//src/sys/modules/basic/worker/editor.js
+//src/sys/modules/basic/worker/coding/codingeditor.js
 //src/sys/modules/basic/worker/basicruntime.js
 //src/sys/modules/basic/worker/extendedcommands.js
 //src/sys/modules/basic/worker/pgmmanager.js
@@ -10,8 +10,10 @@
 //src/sys/modules/basic/worker/basictokenizer.js
 //src/sys/modules/basic/worker/input.js
 //src/sys/modules/basic/worker/processes.js
+//src/sys/modules/basic/worker/commandhelp.js
 //src/sys/modules/basic/worker/../../rwbuffers/worker/textarea.js
 //src/sys/modules/basic/worker/../../rwbuffers/worker/bitmap.js
+//src/sys/modules/basic/worker/../../rwbuffers/worker/audio.js
 //src/sys/modules/basic/worker/workerbootstrap_static.js
 // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
 
@@ -31,8 +33,6 @@ console = sys;
 /* LOGGER */
 
 function init_sys() {
-
-
 
   function post( type, message ) {
     postMessage( { type: type, message: message } );
@@ -59,6 +59,59 @@ function init_sys() {
 
   }
 
+  sys.load = function( rt, path ) {
+
+      post("load", { processId: rt.processId, path:path } );
+
+  }
+
+  sys.loaddata = function( rt, path, type, label ) {
+
+      post("loaddata", { processId: rt.processId, path:path, type: type, label: label } );
+
+  }
+
+  sys.save = function( rt, path, data ) {
+
+      post("save", { processId: rt.processId, path:path, data: data } );
+
+  }
+
+  sys.delete = function( rt, path ) {
+
+      post("delete", { processId: rt.processId, path:path } );
+
+  }
+
+  sys.dir = function( rt, path ) {
+
+      post("dir", { processId: rt.processId, path:path } );
+
+  }
+
+
+  sys.setcfg = function( cfg ) {
+      this.cfg = cfg;
+  }
+
+  sys.listfs = function( rt  ) {
+
+      post("listfs", { processId: rt.processId } );
+
+  }
+
+  sys.poststatus = function( procId, status  ) {
+
+      post("status", { procId: procId, status: status } );
+
+  }
+
+  sys.setfs = function( rt, path  ) {
+
+      this.fs = path;
+      post("setfs", { path: path, processId: rt.processId } );
+
+  }
 
   sys.setDisplayMode = function( rt, m ){
     post( "displaymode", { processId: rt.processId, m:m } );
@@ -69,9 +122,15 @@ function init_sys() {
   }
 
 
-
-
   sys.html = {}
+
+  sys.html.executeFunction = function() {
+
+      var args = Array.prototype.slice.call(arguments);
+      post( "htmldofun",args );
+
+  }
+
   sys.html.html = function() {
 
       var args = Array.prototype.slice.call(arguments);
@@ -94,8 +153,12 @@ function init_sys() {
 
   }
 
-  sys.export = function( code ) {
-    post( "export", { code: code } );
+  sys.export = function( code, destination ) {
+    post( "export", { code: code, destination: destination } );
+  }
+
+  sys.signalHideMenu = function( flag ) {
+    post( "signalHideMenu", { hide: flag } );
   }
 
 }
@@ -107,6 +170,8 @@ function start_sys() {
   sys.input = new Input( sys );
   sys.out = new TextArea( sys );
   sys.bout = new BitMap( sys );
+  sys.audio = new Audio( sys );
+  sys.rootProcId = -1;
 
   /* APPLICATION */
 
@@ -119,6 +184,7 @@ function start_sys() {
         if( data.type == "keydown" ) {
 
           sys.input.inputKeyHandler( data );
+          sys.audio.flagUserInput();
 
         }
         else if( data.type == "message") {
@@ -126,6 +192,13 @@ function start_sys() {
           var runtime = sys.processes.get( id );
 
           runtime.receiveMessage( data.message, data.messageObject );
+
+          //TODO, index of runtime.
+        }
+        else if( data.type == "interrupt") {
+          var runtime = sys.processes.get( sys.rootProcId );
+
+          runtime.interrupt( 0, data.sub, data.data );
 
           //TODO, index of runtime.
         }
@@ -151,6 +224,9 @@ function start_sys() {
           var id = sys.processes.register( runtime );
           sys.log("Basic program registered as process " + id + ".");
 
+          if( sys.rootProcId == -1 ) {
+            sys.rootProcId = id;
+          }
           pgmman.addRuntime( runtime );
 
 
@@ -158,14 +234,237 @@ function start_sys() {
         else if( data.type == "inittxtarea" ) {
 
           sys.log( "init with: " + JSON.stringify( data ) )
+
           sys.out.attach( data.w, data.h );
+
+
+        }
+        else if( data.type == "initcolors" ) {
+
+          sys.log( "init colors with: " + JSON.stringify( data ) )
+
+          sys.out.setDefault( data.colors.fg, data.colors.bg );
+          sys.out.control( 18, data.colors.border );
+          sys.out.reset();
+
+        }
+        else if( data.type == "systeminfo" ) {
+
+          sys.log( "systeminfo with: " + JSON.stringify( data ) )
+          sys.screenModes = data.modes;
+          sys.displayMode = data.mode;
+          sys.windowWidth = data.windowWidth;
+          sys.windowHeight = data.windowHeight;
+
+        }
+        else if( data.type == "setcfg" ) {
+
+          sys.log( "init with: " + JSON.stringify( data ) );
+
+          sys.setcfg( data.cfg );
 
         }
         else if( data.type == "initbitmap" ) {
 
-          sys.log( "init with: " + JSON.stringify( data ) )
+          sys.log( "init with: " + JSON.stringify( data ) );
           sys.bout.attach( data.w, data.h );
 
+        }
+        else if( data.type == "clipboardCopy" ) {
+
+          var runtime = sys.processes.get( sys.rootProcId );
+
+          var code = runtime.getProgramAsText();
+
+          sys.export( code, "clipboard" );
+
+          if( runtime.isReady() ) {
+            runtime.printLine("(!)Copied program to clipboard");
+            runtime.printReady();
+          }
+          sys.log( "clipboard copy" )
+
+        }
+        else if( data.type == "export" ) {
+
+          var runtime = sys.processes.get( sys.rootProcId );
+
+          var code = runtime.getProgramAsText();
+
+          sys.export( code, "disk" );
+
+          if( runtime.isReady() ) {
+            runtime.printLine("(!)Export program to disk");
+            runtime.printReady();
+          }
+          sys.log( "Export to disk" )
+
+        }
+        else if( data.type == "showList" ) {
+
+          var runtime = sys.processes.get( sys.rootProcId );
+
+          var list = data.list;
+
+          runtime.enterListMode(list);
+
+        }
+        else if( data.type == "list" ) {
+
+          var runtime = sys.processes.get( sys.rootProcId );
+
+          var list = ["LIST",""];
+          for (const l of runtime.program)
+            {
+
+              var lineNr = parseInt(l[0]);
+
+              list.push( l[2] );
+            }
+
+          runtime.enterListMode(list);
+
+        }
+        else if( data.type == "renumber" ) {
+
+          var runtime = sys.processes.get( sys.rootProcId );
+
+          runtime.renumberProgram( 10,10 );
+
+          var list = ["RENUMBER"];
+          runtime.enterListMode(list);
+
+        }
+        else if( data.type == "new" ) {
+
+          var runtime = sys.processes.get( sys.rootProcId );
+
+          if( !runtime.isRunning() ) {
+            runtime.new();
+
+            var output = ["NEW", ""];
+            runtime.enterListMode( output );
+          }
+        }
+        else if( data.type == "pastpgm" ) {
+
+          var runtime = sys.processes.get( sys.rootProcId );
+
+          if( !runtime.isRunning() ) {
+            runtime.new();
+            runtime.resetConsole();
+
+            var result = runtime.textLinesToBas( data.data.split("\n") );
+            var pgm = result.pgm;
+            runtime.setProgram( pgm );
+
+            if( result.exception ) {
+              throw result.exception;
+            }
+
+          }
+        }
+        else if( data.type == "vars" ) {
+
+          var runtime = sys.processes.get( sys.rootProcId );
+
+          var varList = runtime.getFullVarList();
+          varList.unshift( "" );
+          varList.unshift( "VARS" );
+
+          runtime.enterListMode( varList );
+
+        }
+        else if( data.type == "datablocks" ) {
+
+          var runtime = sys.processes.get( sys.rootProcId );
+
+          var list = runtime.getDataBlocks();
+          var blockList = ["DATABLOCKS",""];
+
+          for( var i=0;i<list.length;i++) {
+            blockList.push( list[i] );
+          }
+
+          runtime.enterListMode( blockList );
+
+        }
+        else if( data.type == "stopMenu" ) {
+
+          var runtime = sys.processes.get( sys.rootProcId );
+
+          if( runtime.isRunning() ) {
+            runtime.stop();
+            runtime.toggleMenu();
+          }
+          else {
+            runtime.toggleMenu();
+          }
+
+        }
+        else if( data.type == "toggleMenu" ) {
+
+          var runtime = sys.processes.get( sys.rootProcId );
+          runtime.toggleMenu();
+
+        }
+        else if( data.type == "help" ) {
+
+          var runtime = sys.processes.get( sys.rootProcId );
+
+          if( runtime.isReady() ) {
+            runtime.clearScreen();
+            runtime.printLine("HELP");
+            runtime.printHelp();
+            runtime.printLine("");
+            runtime.printLine("For more help type:");
+            runtime.printLine("HELP <option>");
+            runtime.printLine("");
+            runtime.printReady();
+          }
+
+        }
+        else if( data.type == "run" ) {
+
+          var runtime = sys.processes.get( sys.rootProcId );
+
+          if( runtime.isReady() ) {
+            runtime.clearScreen();
+            runtime.printLine("RUN");
+            runtime.runPGM();
+          }
+        }
+        else if( data.type == "stop" ) {
+
+          var runtime = sys.processes.get( sys.rootProcId );
+
+          if( runtime.isRunning() ) {
+            runtime.stop();
+          }
+        }
+        else if( data.type == "resetConsole" ) {
+
+          var runtime = sys.processes.get( sys.rootProcId );
+
+          if( runtime.isReady() ) {
+            runtime.resetConsole();
+          }
+        }
+        else if( data.type == "colorReset" ) {
+
+          var runtime = sys.processes.get( sys.rootProcId );
+
+          if( runtime.isReady() ) {
+            runtime.colorReset( data.colors );
+          }
+        }
+        else if( data.type == "clearScreen" ) {
+
+          var runtime = sys.processes.get( sys.rootProcId );
+
+          if( runtime.isReady() ) {
+            runtime.clearScreen();
+          }
         }
         else {
           var type = obj.data;
@@ -222,14 +521,19 @@ class  BasicArray {
 
   _check( indices ) {
     if( indices.length != this.indices.length ) {
-      throw "00:index dimension mismatch for array " + this.name;
+      throw "BasicArray:00:index dimension mismatch:For array " + this.name;
     }
     for( var i=0; i<indices.length; i++) {
       if ( indices[i] > this.indices[ i ]) {
-        throw "01:index " + indices[i] + " out of bounds for array " + this.name + " for index " + i;
+        var detail = "\"" + this.name + "[" + indices[i] + "]"+"\" does not exist";
+        if( indices.length > 1) {
+          detail = "\"" + this.name + "\" with index " + indices[i] + " does not exist";
+          detail += " for index dimension " + i;
+        }
+        throw "BasicArray:01:index out of bounds:" + detail;
       }
       else if ( indices[i] < 0) {
-        throw "02:index smaller then zero for array " + this.name;
+        throw "BasicArray:02:index smaller then zero:For array " + this.name;
       }
 
     }
@@ -297,6 +601,28 @@ class ErrorHandler {
     throw this.newError( clazz, detail, context, lineNr );
   }
 
+
+  fromSimpleExternalError( s, context, lineNr0 ) {
+
+    var lineNr = lineNr0;
+    if( lineNr === undefined ) {
+      lineNr = -1;
+    }
+
+    var parts = s.split(":");
+    if( !parts.length == 3) {
+      return undefined;
+    }
+
+    var err = this.newError( parts[2], parts[3], context, lineNr );
+
+    err.extCode0 = parts[0];
+    err.extCode1 = parts[1];
+
+    return err;
+
+  }
+
   fromSerializedError( s, context, lineNr0 ) {
 
     var lineNr = lineNr0;
@@ -337,58 +663,126 @@ class ErrorHandler {
 
 //--EOC 
 
-// ## editor.js ==========---------- 
+// ## coding/codingeditor.js ==========---------- 
 // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
-//  src/sys/modules/basic/worker/editor.js
-//  BY packworkers.js -- src/sys/modules/basic/worker/editor.js
+//  src/sys/modules/basic/worker/coding/codingeditor.js
+//  BY packworkers.js -- src/sys/modules/basic/worker/coding/codingeditor.js
 
 class Editor {
 
   constructor( sys ) {
     this.sys = sys;
     this.output = sys.out;
+    this.keyMode = "insert";
 
+    //this.lineMarkers = [ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 ];
   }
+
 
   addRunTime( rt ) {
     this.runTime = rt;
   }
 
+  keyHandlerForCLE( e ) {
+
+      if( e.keyLabel == "Enter" ) {
+        var command = sys.out.getCurrentLine();
+        this.output.writeln("");
+
+        this.runTime.executeInteractiveLine( command );
+
+      }
+      else if( e.keyLabel == "Backspace" ||
+              e.keyLabel == "Delete"  ) {
+
+        if( e.keyLabel == "Delete" ) {
+              this.output.delete();
+        }
+        else {
+            this.output.backspace();
+        }
+
+      }
+      else if( e.keyLabel == "ArrowUp" && !e.ctrlKey) {
+        this.output.cursorMove("up");
+      }
+      else if( e.keyLabel == "ArrowDown" && !e.ctrlKey) {
+        this.output.cursorMove("down");
+      }
+      else if( e.keyLabel == "ArrowUp" && e.ctrlKey ) {
+        this.output.cursorMove("up");
+        this.output.cursorMove("up");
+        this.output.cursorMove("up");
+        this.output.cursorMove("up");
+      }
+      else if( e.keyLabel == "ArrowDown" && e.ctrlKey ) {
+        this.output.cursorMove("down");
+        this.output.cursorMove("down");
+        this.output.cursorMove("down");
+        this.output.cursorMove("down");
+      }
+      else if( e.keyLabel == "ArrowLeft" && !e.ctrlKey ) {
+        this.output.cursorMove("left");
+      }
+      else if( e.keyLabel == "ArrowRight" && !e.ctrlKey) {
+        this.output.cursorMove("right");
+      }
+      else if( (e.keyLabel == "ArrowRight" && e.ctrlKey) ) {
+        this.output.jumpTo("text-end");
+      }
+      else if( (e.keyLabel == "ArrowLeft" && e.ctrlKey) ) {
+        this.output.jumpTo("text-start");
+      }
+      else if( e.keyLabel == "Home" && !e.ctrlKey && !e.shiftKey ) {
+        this.output.jumpTo("line-start");
+      }
+      else if( e.keyLabel == "Home" && e.shiftKey && !e.ctrlKey ) {
+        this.output.clear();
+      }
+      else if( e.keyLabel == "End" && !e.ctrlKey ) {
+        this.output.jumpTo("line-end");
+      }
+      else if( e.keyLabel == "Home" && e.ctrlKey && !e.shiftKey ) {
+        this.output.jumpTo("home");
+      }
+      else if( e.keyLabel == "End" && e.ctrlKey ) {
+        this.output.jumpTo("end");
+      }
+      else if( e.keyLabel == "Tab" ) {
+        if( this.keyMode == "insert") {
+          this.output.insert(  "        " );
+        }
+        else {
+          this.output.write(  "        " );
+        }
+
+      }
+      else if( e.keyLabel == "Insert" ) {
+
+        if( this.keyMode == "insert") {
+          this.keyMode = "overwrite";
+        }
+        else {
+          this.keyMode = "insert";
+        }
+        this.output.setCursorMode( this.keyMode )
+      }
+      else {
+        if( e.key != null ) {
+          if( this.keyMode == "insert") {
+            this.output.insert( e.key );
+          }
+          else {
+            this.output.write( e.key );
+          }
+        }
+      }
+
+  }
+
+
   interactiveKeyHandler( e ) {
-    //this.sys.log( "editor got even " + JSON.stringify( e ) );
-
-    if( e.keyLabel == "Enter" ) {
-      var command = sys.out.getCurrentLine();
-      this.output.writeln("");
-
-      this.runTime.executeInteractiveLine( command );
-
-    }
-    else if( e.keyLabel == "Backspace" ||
-            e.keyLabel == "Delete"  ) {
-      var x = this.output.getCursorPos()[0];
-      if( x>0) {
-          this.output.backspace();
-      }
-    }
-    else if( e.keyLabel == "ArrowUp" ) {
-      this.output.cursorMove("up");
-    }
-    else if( e.keyLabel == "ArrowDown" ) {
-      this.output.cursorMove("down");
-    }
-    else if( e.keyLabel == "ArrowLeft" ) {
-      this.output.cursorMove("left");
-    }
-    else if( e.keyLabel == "ArrowRight" ) {
-      this.output.cursorMove("right");
-    }
-    else {
-      if( e.key != null ) {
-        this.output.write( e.key );
-      }
-    }
-
+    this.keyHandlerForCLE( e );
   }
 }
 
@@ -412,9 +806,11 @@ class BasicRuntime {
     this.output = sys.out;
     this.bitmap = sys.bout;
     this.input = sys.input;
+    this.audio = sys.audio;
     this.input.setHandler( this );
     this.input.setInterActive( false);
     this.html = sys.html;
+    this.menuEnable = false;
 
     this.program = [];
     this.runFlag = false;
@@ -426,6 +822,8 @@ class BasicRuntime {
     this.inputFlag = false;
     this.listFlag = false;
     this.immersiveFlag = false;
+    this.statusChanged = false;
+
     this.gosubReturn = [];
     this.nullTime = new Date().getTime();
 
@@ -434,21 +832,21 @@ class BasicRuntime {
     this.cmdCountPerCycleTurbo = 20000;
     this.cmdCountPerCycle = this.cmdCountPerCycleDefault ;
 
-    //var ctx = this.outtext;
     var c = this.output;
     this.commands = new BasicCommands( this );
-    this.extendedcommands = new ExtendedCommands( this );
-    //this.extendedcommands.getStatements = function() { return [] };
-    //this.extendedcommands.getFunctions  = function() { return [] };
+    this.extendedcommands = new ExtendedCommands( this.commands, this );
 
     this.erh = new ErrorHandler();
-    this.vars = [];
+    this.vars = {};
     this.functions = [];
     this.data = [];
+    this.loadedData = { default: [] };
+    this.loadedLabel = null;
+
     this.kbBuffer = [];
 
     this.yPos = -1;
-    this.lineMarkers = [ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 ];
+
     this.SHORTLINE = 0;
     this.LONGLINESTART = 1;
     this.LONGLINEEND = 2;
@@ -529,9 +927,235 @@ class BasicRuntime {
 
   }
 
+  flagStatusChange() {
+    this.statusChanged = true;
+  }
+
+
+  getScopeVars( s ) {
+    return s.vars;
+  }
+
+  getFullVarList() {
+    var scopes = this.getFullScopes();
+    var varList = [];
+
+    for( var si = 0; si< scopes.length; si++ ) {
+
+      var fullscope = scopes[si];
+      var vars = this.getScopeVars( fullscope.scope );
+      var names = Object.getOwnPropertyNames( vars );
+
+      for( var i=0;i<names.length;i++) {
+        var name = names[i];
+        var value = vars[ name ];
+        var path = fullscope.path;
+        if( path == "" ) { path = ""; }
+        else { path += "/"; }
+        if( ! name.startsWith( "@array_" ) ) {
+            if( name.endsWith("$") ) {
+                varList.push( path + name + " = \"" + value + "\"" );
+            }
+            else {
+                varList.push( path + name + " = " + value );
+            }
+        }
+        else {
+            var descr = "";
+            for( var ii=0; ii<value.indices.length; ii++ ) {
+              if( ii>0 ) { descr += ","; }
+              descr += value.indices[  ii ];
+
+            }
+            varList.push( name.substr(7) + " = array with dim(" + descr + ")" );
+        }
+      }
+    }
+
+    return varList;
+  }
+
+  getFullScopes() {
+    var scopes = [];
+    var path = "";
+    for( var si = 0 ; si < this.scopes.length; si++ ) {
+      var scope = this.scopes[si].name;
+
+      if( si > 0) {
+        if( path != "" ) {
+          path += "/";
+        }
+        path += scope;
+      }
+
+      scopes.push( { path: path, scope: this.scopes[si]  } );
+    }
+
+    return scopes;
+  }
+
+  cpuNeeded() {
+    return this.runFlag;
+  }
+
+  getStatus() {
+
+    var status = "";
+    var lineNr;
+    if( this.runFlag ) {
+      lineNr = this.program[ this.runPointer ][0];
+      status = "running[" + lineNr + "]";
+    }
+    else {
+      status = "stopped";
+    }
+
+    if( this.runFlag && this.inputFlag ) {
+      status = "running[" + lineNr + "]/input";
+    }
+    else if( !this.runFlag && this.listFlag ) {
+      status = "stopped/listing";
+    }
+
+    var vlen = Object.getOwnPropertyNames( this.getVars() ).length;
+
+
+    this.statusChanged = false;
+
+    return {
+      status: status,
+      pgmLen: this.program.length,
+      varLen: vlen,
+      displayMode: this.sys.displayMode
+    }
+  }
+
+  dir( path ) {
+    this.sys.dir( this, path );
+    this.startWaitForMessage( "dir" )
+  }
+
+  listfs() {
+    this.sys.listfs( this );
+    this.startWaitForMessage( "listfs" )
+  }
+
+  setfs( path ) {
+    this.sys.setfs( this, path );
+    this.startWaitForMessage( "path" )
+  }
+
+  load( path, start ) {
+    this.sys.load( this, path );
+    this.startWaitForMessage( "load" )
+    this.autoStartAfterLoad = start;
+
+  }
+
+  loaddata( path, type, label ) {
+    this.sys.loaddata( this, path, type, label );
+    this.startWaitForMessage( "loaddata" )
+
+  }
+
+  save( path0 ) {
+
+    var data = this.getProgramAsText();
+    var path = path0;
+    if( path0 == null ) {
+      path = "default.bas";
+    }
+    this.sys.save( this, path, data );
+    this.startWaitForMessage( "save" )
+  }
+
+  deleteFile( path ) {
+
+    this.sys.delete( this, path );
+    this.startWaitForMessage( "delete" )
+  }
+
+
   startWaitForMessage( variable ) {
     this.waitForMessageFlag = true;
     this.waitForMessageVariable = variable;
+  }
+
+
+  keyInterrupt( _type, _data ) {
+    this.interrupt( 0, _type, {} );
+  }
+
+  interrupt( _ix, _type, _data ) {
+
+
+
+    if( _ix == 0 && this.interruptFlag0 ) {
+        return; //allready in an interrupt0
+    }
+
+    if( _ix == 1 && this.interruptFlag1 ) {
+        return; //allready in an interrupt1
+    }
+
+
+    var line, useLabel;
+    if( _ix == 0 ) {
+
+      line = this.handlers.interrupt0;
+      if( line === undefined ) {
+        return;
+      }
+      this.interruptFlag0 = true;
+      useLabel = this.handlers.interrupt0ParamIsLabel;
+    }
+    else {
+
+      line = this.handlers.interrupt1;
+      if( line === undefined ) {
+        return;
+      }
+      this.interruptFlag1 = true;
+      useLabel = this.handlers.interrupt1ParamIsLabel;
+    }
+
+
+    this.newScope( "interrupt" + _ix,
+      { runPointer: this.runPointer, runPointer2: this.runPointer2 } );
+
+    var variables = Object.entries( _data );
+    this.setVar( "itr0$".toUpperCase(), _type.toUpperCase() );
+    for( var i=0; i<variables.length; i++) {
+      this.setVar( variables[i][0].toUpperCase(), variables[i][1] );
+    }
+
+    var pgm = this.program;
+    var len=this.program.length;
+    var found = false;
+
+    if( useLabel ) {
+
+      line = this.labels[line];
+      if( line == undefined ) {
+        throw "@undef'd label";
+      }
+    }
+
+    for( var i=0; i<len; i++) {
+      var l = pgm[i];
+
+      if( l[0] == line ) {
+        this.runPointer = i;
+        this.runPointer2 = 0;
+        found = true;
+        break;
+      }
+    }
+
+    if(!found ) {
+      throw "@invalid interrupt handler";
+    }
+
   }
 
   receiveMessage( _message, _data ) {
@@ -539,14 +1163,134 @@ class BasicRuntime {
     this.vars[ this.waitForMessageVariable ] = _message;
     this.waitForMessageFlag = false;
 
-    if( _message == "displaysize" ) {
+    if( _message.startsWith( "displaysize:" )) {
         this.output.reInit( _data.textW, _data.textH );
-        this.output.reInit( _data.bitmapW, _data.bitmapH );
+        this.bitmap.reInit( _data.bitmapW, _data.bitmapH );
+        this.sys.displayMode = _data.mode;
 
-        if( this.runFlag == false ) {
-            this.printReady();
-        }
     }
+    else if( _message == "load:error" ) {
+
+      if( this.runFlag == false ) {
+          this.printError("load", false, undefined, _data.reason );
+      }
+    }
+    else if( _message == "load:completed" ) {
+
+      sys.log("Received 'load:completed' message. Loaded " + _data.pgmData.length + " bytes.." );
+
+      var ok = this.bootPGM( _data.pgmData, _data.path  );
+      sys.log("Parsed program => RUN");
+
+      if( ok && this.autoStartAfterLoad ) {
+        this.output.control( 24 )
+        this.runPGM();
+        sys.log("Program started...");
+      }
+      else {
+        this.stop();
+      }
+    }
+    else if( _message == "loaddata:completed" ) {
+
+      sys.log("Received 'loaddata:completed' message. Loaded " + _data.data.length + " bytes.." );
+      this.insertData( _data.data, _data.type, _data.label  );
+
+    }
+    else if( _message == "loaddata:error" ) {
+
+      sys.log("Received 'loaddata:error' message. Error " + _data.reason );
+
+      this.printError("loaddata", false, undefined, _data.reason );
+      this.stop();
+    }
+    else if( _message == "delete:completed" ) {
+
+      sys.log("Received 'delete:completed' message." );
+
+    }
+    else if( _message == "delete:error" ) {
+
+      sys.log("Received 'delete:error' message. Error " + _data.reason );
+
+      this.printError("delete", false, undefined, _data.reason );
+      this.stop();
+    }
+    else if( _message == "save:completed" ) {
+
+      sys.log("Received 'save:completed' message." );
+
+      if( !this.isRunning() ) {
+      }
+    }
+    else if( _message == "save:error" ) {
+
+      sys.log("Received 'save:error' message. Error " + _data.reason );
+
+      this.printError("save", false, undefined, _data.reason );
+      this.stop();
+    }
+    else if( _message == "dir:completed" ) {
+
+      sys.log("Received 'dir:completed' message." );
+
+      var list = ["","Directory of: \"" + _data.title + "\" on " + _data.fs, "" ];
+
+      for( var i=0; i<_data.files.length; i++) {
+          list.push( _data.files[i].fname );
+      }
+
+      list.push( _data.files.length + " files");
+
+      this.enterListMode( list );
+
+    }
+    else if( _message == "listfs:completed" ) {
+
+      sys.log("Received 'listfs:completed' message." );
+
+      var list = ["", "Default Filesystem: \"" + _data.currentFs + "\"", "", "Devices:", "" ];
+
+      for( var i=0; i<_data.fs.length; i++) {
+          list.push("    \"" + _data.fs[i] + "\"");
+      }
+
+      list.push( "" );
+      list.push( _data.fs.length + " Filesystem Devices Found");
+
+      this.enterListMode( list );
+
+    }
+    else if( _message == "setfs:completed" ) {
+
+      if( !this.isRunning() ) {
+        if( _data.status == "ok" ) {
+        }
+        else {
+          this.printError("file system", false, undefined, "Could not select file system" );
+        }
+
+      }
+      else {
+        if( _data.status != "ok" ) {
+
+          this.printError("file system", false, undefined, "Could not select file system" );
+          this.stop();
+        }
+      }
+    }
+
+    if( this.stopAfterMessage ) {
+      this.stopAfterMessage = false;
+      this.runFlag = false;
+      this.HandleStopped( false );
+
+    }
+
+    if( !this.isRunning() && this.listFlag == false ) {
+      this.printReady();
+    }
+
   }
 
   stop() {
@@ -563,30 +1307,59 @@ class BasicRuntime {
     if( this.runFlag == true ) {
       if( e.keyLabel == "Enter" ) {
 
+        var cxy = this.output.getCursorPos();
+
+        var string = this.output.getLineFrom( this.inputStartInputPosX, cxy[1]);
         this.output.writeln("");
-        this.handleLineInput( this.lineInput, true );
-        this.lineInput = "";
+
+        this.handleLineInput( string, true );
       }
       else if( e.keyLabel == "Backspace" ||
               e.keyLabel == "Delete"  ) {
         var x = this.output.getCursorPos()[0];
-        if( x>0) {
-            if( this.lineInput.length > 0 ) {
-                this.output.backspace();
-                this.lineInput = this.lineInput.substr(0,this.lineInput.length-1)
-            }
 
+        if( e.keyLabel == "Delete" ) {
+              this.output.delete();
+        }
+        else {
+            if( x > this.inputStartInputPosX ) {
+                this.output.backspace();
+            }
+            else {
+              this.output.delete();
+            }
+        }
+
+      }
+      else if( e.keyLabel == "ArrowLeft" && !e.ctrlKey) {
+        var cx = this.output.getCursorPos();
+        if( cx[0] > this.inputStartInputPosX ) {
+          this.output.cursorMove("left");
         }
       }
-      else if( e.keyLabel == "ArrowLeft" ) {
-        this.output.cursorMove("left");
-      }
-      else if( e.keyLabel == "ArrowRight" ) {
+      else if( e.keyLabel == "ArrowRight" && !e.ctrlKey) {
         this.output.cursorMove("right");
+      }
+      else if( e.keyLabel == "Home" && !e.ctrlKey ) {
+        var xy = this.output.getCursorPos();
+
+        this.output.setCursorPos( this.inputStartInputPosX, xy[1]);
+      }
+      else if( (e.keyLabel == "ArrowRight" && e.ctrlKey)) {
+        this.output.jumpTo("text-end");
+      }
+      else if( e.keyLabel == "End" ) {
+        this.output.jumpTo("text-end-all");
+      }
+      else if( (e.keyLabel == "ArrowLeft" && e.ctrlKey) ) {
+        this.output.jumpTo("text-start");
+        var xy = this.output.getCursorPos();
+        if( xy[0]< this.inputStartInputPosX ) {
+          this.output.setCursorPos( this.inputStartInputPosX, xy[1] );
+        }
       }
       else {
         if( e.key != null ) {
-          this.lineInput += e.key;
           this.output.write( e.key );
         }
       }
@@ -596,13 +1369,30 @@ class BasicRuntime {
     }
   }
 
-  HandleStopped() {
+  toggleMenu()  {
+    this.menuEnable = !this.menuEnable;
+
+    if( this.menuEnable ) {
+      this.sys.signalHideMenu( false );
+    }
+    else {
+      this.sys.signalHideMenu( true );
+    }
+  }
+
+  HandleStopped( startingProgram ) {
 
     this.input.setInterActive( true);
+    this.input.flush();
+    if( !startingProgram && this.menuEnable ) {
+      this.sys.signalHideMenu( false );
+    }
+
+    this.flagStatusChange();
   }
 
   importPGMHandler( content, filename ) {
-    var pgm = this.textLinesToBas( content.split("\n") );
+    var pgm = this.textLinesToBas( content.split("\n") ).pgm;
     this.fileName = filename;
 
     this.program = pgm;
@@ -611,7 +1401,7 @@ class BasicRuntime {
 
   bootPGM( content, filename ) {
     try {
-      var pgm = this.textLinesToBas( content.split("\n") );
+      var pgm = this.textLinesToBas( content.split("\n") ).pgm;
       this.fileName = filename;
 
       this.program = pgm;
@@ -623,9 +1413,9 @@ class BasicRuntime {
     catch ( e ) {
       var tmp = 1;
 
-      var pgm = this.textLinesToBas( "" );
+      var pgm = this.textLinesToBas( "" ).pgm;
       this.program = pgm;
-      this.HandleStopped();
+      this.HandleStopped( false );
       this.printError("parsing syntax", false, e.lineNr, e.detail );
       this.printReady();
       return false;
@@ -654,7 +1444,9 @@ class BasicRuntime {
     this.listFlag = true;
     this.list = list;
     this.listPointer = 0;
+    this.printLine("");
     this.input.setInterActive( false );
+    this.flagStatusChange();
   }
 
   setExitMode( v ) {
@@ -687,11 +1479,13 @@ class BasicRuntime {
   setProgram( pgm ) {
     this.program = pgm;
     this.runFlag = false;
-    this.HandleStopped();
+    this.HandleStopped( true );
 
     this.inputFlag = false;
     this.listFlag = false;
-    //this.output.clearCursor();
+
+    this.flagStatusChange();
+
   }
 
   appendProgram( pgm ) {
@@ -720,7 +1514,7 @@ class BasicRuntime {
     this.program.sort( sortF );
 
     this.runFlag = false;
-    this.HandleStopped();
+    this.HandleStopped( false );
 
     this.inputFlag = false;
     this.listFlag = false;
@@ -745,35 +1539,13 @@ class BasicRuntime {
 
   setProgramState( pgmState ) {
       this.runFlag = pgmState.runFlag;
-      this.HandleStopped();
+      this.HandleStopped( false );
       this.inputFlag = pgmState.inputFlag;
       this.vars = pgmState.vars;
       this.functions = pgmState.functions;
       this.forContext = pgmState.forContext;
       this.runPointer = pgmState.runPointer;
       this.runPointer2 = pgmState.runPointer2;
-  }
-
-
-  updateEditMode() {
-
-
-    if( !this.runFlag && !this.listFlag && ! this.executeLineFlag ) {
-      this.setEditModeCallBacks( "edit" );
-      return;
-    }
-    else if( this.listFlag ) {
-      this.setEditModeCallBacks( "edit" );
-      return;
-    }
-    else if( this.runFlag && this.inputFlag ) {
-      this.setEditModeCallBacks( "edit" );
-      return;
-    }
-    else if( this.runFlag || this.executeLineFlag ) {
-      this.setEditModeCallBacks( "print" );
-      return;
-    }
   }
 
   _setByteBits( bits ) {
@@ -808,16 +1580,24 @@ class BasicRuntime {
    return results;
   }
 
+  upperFirst( s ) {
+    if( s ) {
+      if ( s.length > 1 ) {
+          return s.substr(0,1).toUpperCase() + s.substr( 1 );
+      }
+    }
+    return s;
+  }
+
   printError( s, supressLine, explicitline, detail ) {
 
-    var line1 = ("?" + s + " error" + this.onLineStr());
+    var line1 = ("?" + this.upperFirst( s ) + " error" + this.onLineStr());
 
     if( explicitline ) {
-        line1 = ( ("?" + s + " error in " + explicitline ) );
+        line1 = ( ("?" + this.upperFirst( s ) + " error in " + explicitline ) );
     }
     if( supressLine ) {
-
-        line1 = ( ("?" + s + " error") );
+        line1 = ( ("?" + this.upperFirst( s ) + " error") );
     }
 
     this.output.writeln(  line1 );
@@ -833,22 +1613,47 @@ class BasicRuntime {
 
   }
 
+  printHelp() {
+    this.extendedcommands["_stat_help"]([]);
+  }
+
   printLine( s ) {
-    this.output.writeln(s.toUpperCase());
+    this.output.writeln(s);
     this.reverseOn = false;
   }
+
 
   print( s ) {
-    this.output.writeln(s.toUpperCase());
+    this.output.writeln(s);
     this.reverseOn = false;
   }
 
 
-  clearScreen() {
-    this.output.clearScreen();
-    this.output.cursorHome();
+//{ fg: 5, bg:1, border: 7 }
+  colorReset( colors ) {
+    this.output.setDefault( colors.fg, colors.bg );
+    this.output.control( 18, colors.border );
+    this.output.colorReset();
   }
 
+  resetConsole() {
+    var wh = this.output.getDimensions();
+
+    //this.output.textArea(  wh[0], wh[1], -1, -1 );
+
+    this.output.reset();
+    //this.output.setPos(0,0);
+  }
+
+  clearScreen() {
+    this.output.clear();
+    this.output.setPos(0,0);
+  }
+
+  getMillis() {
+    var millis=new Date().getTime() - this.nullTime;
+    return millis;
+  }
 
   getJiffyTime() {
     var millis=new Date().getTime() - this.nullTime;
@@ -872,7 +1677,7 @@ class BasicRuntime {
 
   reset( hard, muteReady ) {
     this.output.clearScreen();
-    this.output.writel("ready.");
+    this.output.writel("Ready.");
 
     this.inputFlag = false;
     this.runFlag = false;
@@ -912,6 +1717,9 @@ class BasicRuntime {
     return text;
   }
 
+  getProgramSize() {
+    return this.program.length;
+  }
 
   getProgramAsText() {
     var text = "";
@@ -920,7 +1728,11 @@ class BasicRuntime {
         if( text != "") {
           text += "\n";
         }
-        text +=  this.prepareLineForExport( l[2].trim() );
+        //text +=  this.prepareLineForExport( l[2].trim() );
+        if( l[1][0].type == "control" && l[1][0].controlKW == "sub" ) {
+            text += "\n";
+        }
+        text += l[2].trim();
       }
     return text;
   }
@@ -932,7 +1744,7 @@ class BasicRuntime {
 
     for( var i=0; i<txt.length; i++) {
       var c = txt.charCodeAt( i );
-      if( c<31 || c==92 || c>=94 ) {
+      if( c<31 || c==92 || c>=126 ) {
         var symdef = this.symbolTableBM[ c ];
         if( ! ( symdef === undefined ) ) {
             dst += "{" + symdef + "}";
@@ -1117,7 +1929,7 @@ class BasicRuntime {
     }
     else if( p.type=="var" ) {
       if(p.data.startsWith("TI")) {
-        val = this.getJiffyTime();
+        val = this.getMillis();
         if(p.data.endsWith("$")) {
           val = this.getTime();
           val = "" +
@@ -1140,6 +1952,9 @@ class BasicRuntime {
       }
       if( val == undefined ) {
         val = 0;
+        if( this.scopes[0].vars[ p.data ] ) {
+          val = this.scopes[0].vars[ p.data ];
+        }
       }
     }
     else if( p.type=="array" ) {
@@ -1147,7 +1962,12 @@ class BasicRuntime {
       var arr = this.vars[ varIntName ];
 
       if( arr === undefined ) {
-        throw "@no such array@Array '"+ varIntName+"' does not exist";
+        if( this.scopes[0].vars[ varIntName ] ) {
+          arr = this.scopes[0].vars[ varIntName ];
+        }
+        if( arr === undefined ) {
+          throw "@no such array@Array '"+ varIntName+"' does not exist";
+        }
       }
 
       if( arr.getIndexCount() != p.indices.length ) {
@@ -1276,6 +2096,9 @@ class BasicRuntime {
         }
         val /= this.evalExpressionPart( p );
       }
+      else if( p.op == "%" ) {
+        val %= this.evalExpressionPart( p );
+      }
       else if( p.op == ";" ) {
         val += ("" + this.evalExpressionPart( p ));
       }
@@ -1346,7 +2169,7 @@ class BasicRuntime {
   }
 
   exitInputState() {
-    var c = this.output;
+    var con = this.output;
     var p = this.program;
 
     this.inputFlag = false;
@@ -1395,10 +2218,10 @@ class BasicRuntime {
 
         this.runFlag = false;
 
-        this.HandleStopped();
-        c.clearCursor();
+        this.HandleStopped( false );
+        //con.clearCursor();
         this.printLine("");
-        this.printLine("ready.");
+        this.printReady();
 
       }
 
@@ -1410,6 +2233,8 @@ class BasicRuntime {
   breakCycle() {
     this.breakCycleFlag = true;
   }
+
+
 
   cycle() {
 
@@ -1424,13 +2249,14 @@ class BasicRuntime {
     var c = this.output;
 
     var cmdCount = this.cmdCountPerCycle;
-
-
-
+    var lineNumber = -1;
     try {
 
       if( this.bitmap.isActive() ) {
         this.bitmap.triggerFlush();
+      }
+      if( this.output.isActive() && this.output.changeCount() > 0) {
+        this.output.triggerFlush();
       }
 
       if( !this.runFlag ||
@@ -1446,6 +2272,7 @@ class BasicRuntime {
            }
            if (  this.listPointer >= this.list.length ){
              this.listStop();
+             this.flagStatusChange();
            }
 
         }
@@ -1454,24 +2281,51 @@ class BasicRuntime {
 
         if(this.debugFlag) console.log("START CYCLE------------------------------" );
 
-        if( this.waitForMessageFlag ) {
-            return;
-        }
-
         var p = this.program;
 
         while (true) {
+
+
+          if( this.waitForMessageFlag ) {
+              return this.statusChanged;
+          }
 
           if( this.breakCycleFlag ) {
             this.breakCycleFlag = false;
             break;
           }
+
           if(this.debugFlag) console.log("START CYCLE LOOP-------------" );
           var l = p[ this.runPointer ];
+          lineNumber = l[0];
+
+          if( l === undefined ) {
+            var t=1;
+          }
           var bf = this.runPointer2;
           if(this.debugFlag) console.log(" this.runPointer = " + this.runPointer, " this.runPointer2 = " + this.runPointer2 );
           if(this.debugFlag) console.log(" cmdCount = " + cmdCount);
           var rv = this.runCommands( l[1], cmdCount );
+
+          if(! ( this.traceVars === undefined )) {
+              for( var tvi=0; tvi<this.traceVars.length; tvi++) {
+                var thisVar = this.traceVars[ tvi ];
+                var thisValue = this.vars[ thisVar ];
+                var oldValue = this.traceOldValues[ thisVar ];
+
+                if( ! ( thisValue === undefined )) {
+                  if( oldValue != thisValue ) {
+                    this.traceList.push(
+                      "TRC(" + lineNumber + ") " + thisVar + "=" + thisValue
+                    );
+
+                    this.traceOldValues[ thisVar ] = thisValue;
+                  }
+
+                }
+              }
+          }
+
           //console.log(" rv = ", rv);
           var af = rv[ 1 ];
 
@@ -1495,15 +2349,17 @@ class BasicRuntime {
               e = rv[3];
             }
             this.printLine("");
-            this.printLine("ready.");
-            this.HandleStopped();
+            this.printReady();
+            this.HandleStopped( false );
             if( rv[0] == END_W_ERROR ) {
+
+              this.setVar("LINE", lineNumber );
               console.log("ERROR: ", e, " LINE ", this.retreiveRuntimeLine() );
               console.log("PARAMETER DUMP:", this.vars );
               console.log("FUNCTION DUMP:", this.functions );
             }
             if(this.debugFlag) console.log("CYCLE RETURN END");
-            return;
+            return this.statusChanged;
           }
           else if( rv[0] == LINE_FINISHED ) {
             this.runPointer ++;
@@ -1512,10 +2368,17 @@ class BasicRuntime {
 
             if( this.runPointer >=  p.length ) {
               if(this.debugFlag) console.log( "end program");
-              this.runFlag = false;
-              this.HandleStopped();
 
-              this.printLine("ready.");
+              this.setVar("LINE", lineNumber );
+
+              if( !this.waitForMessageFlag ) {
+                this.runFlag = false;
+                this.HandleStopped( false );
+                this.printReady();
+              }
+              else {
+                this.stopAfterMessage = true;
+              }
               break;
             }
           }
@@ -1547,22 +2410,49 @@ class BasicRuntime {
     catch (e) {
       //c.clearCursor();
 
+      sys.log("DEBUG: ", typeof e );
+
+      this.setVar("LINE", lineNumber );
+
+
+
       if( this.erh.isSerializedError( e ) ) {
         var err = this.erh.fromSerializedError( e );
+
+        this.setVar("ERR", err.clazz );
+        this.setVar("ERRDETAIL", err.detail  );
+
         this.printError( err.clazz, undefined, undefined, err.detail );
       }
       else {
-        this.printError("unexpected");
+        var err = this.erh.fromSimpleExternalError( e, undefined, undefined );
+
+        if( err ) {
+
+            this.setVar("ERR", err.clazz );
+            this.setVar("ERRDETAIL", err.detail  );
+            this.printError( err.clazz, undefined, undefined, err.detail );
+        }
+        else {
+
+            this.setVar("ERR", "unexpected" );
+            this.setVar("ERRDETAIL", "unexpected"  );
+            this.printError( "unexpected", undefined, undefined, e );
+        }
+
       }
 
-      this.printLine("ready.");
+      this.printReady();
       this.runFlag = false;
+      this.HandleStopped( false );
 
       sys.log("ERROR: ", e, " LINE ", this.retreiveRuntimeLine() );
       sys.log("PARAMETER DUMP:", this.vars );
       sys.log("FUNCTION DUMP:", this.functions );
 
     }
+
+    return this.statusChanged;
   }
 
   doReturn() {
@@ -1578,12 +2468,41 @@ class BasicRuntime {
     //this.goto( oldLine );
   }
 
-  gosub( line, runPointer2 ) {
+
+  doInterruptReturn() {
+
+    if( this.scope.name == "interrupt0" ) {
+      this.interruptFlag0 = false; // TODO interrupt, take from scope which flag
+    }
+    else {
+      this.interruptFlag1 = false; // TODO interrupt, take from scope which flag
+    }
+
+    this.runPointer = this.scope.data.runPointer;
+    this.runPointer2 = this.scope.data.runPointer2;
+
+    this.closeScope();
+
+  }
+
+
+
+
+  gosub( line0, runPointer2 ) {
+
 
     var pgm = this.program;
     var len=this.program.length;
     var retLine = null;
     var retCmd = null;
+
+    var line = line0;
+    if( (typeof line0).toLowerCase() == "string" ) {
+      line = this.labels[line0];
+      if( line == undefined ) {
+        throw "@undef'd label";
+      }
+    }
 
     this.runPointer2 = runPointer2;
 
@@ -1614,11 +2533,12 @@ class BasicRuntime {
     var found = false;
     var line;
 
-    if( (typeof line0) == "number" ) {
-        line = line0;
-    }
-    else {
-        line = this.evalExpression( line0 );
+    line = line0;
+    if( (typeof line0).toLowerCase() == "string" ) {
+      line = this.labels[line0];
+      if( line == undefined ) {
+        throw "@undef'd label";
+      }
     }
 
     for( var i=0; i<len; i++) {
@@ -1645,8 +2565,9 @@ class BasicRuntime {
     if( this.listFlag ) {
       var c = this.output;
       this.listFlag = false;
-      this.HandleStopped();
-      this.printLine( "ready.");
+      this.HandleStopped( false );
+      this.printLine( "" );
+      this.printReady();
     }
   }
 
@@ -1655,11 +2576,19 @@ class BasicRuntime {
     if( this.runFlag ) {
       var c = this.output;
       this.runFlag = false;
-      this.HandleStopped();
+      this.handlers.interrupt0 = undefined;
+      this.handlers.interrupt1 = undefined;
+
+      this.HandleStopped( false );
 
       console.log( "break in " + this.program[ this.runPointer ][0] );
+
+      this.setVar( "LINE", this.program[ this.runPointer ][0] );
+      this.setVar("ERR", "BREAK" );
+
+      this.printLine("");
       this.printLine( "break in " + this.program[ this.runPointer ][0]);
-      this.printLine( "ready.");
+      this.printReady();
     }
   }
 
@@ -1675,6 +2604,26 @@ class BasicRuntime {
     return this.inputFlag;
   }
 
+  isReady() {
+    return !this.runFlag && !this.listFlag && ! this.executeLineFlag;
+  }
+
+
+  getDataBlocks() {
+    var list = [];
+
+    var mapInfo = Object.entries( this.loadedData );
+    for( var i=0; i<mapInfo.length; i++) {
+      if( mapInfo[i][1].length > 0) {
+        list.push( mapInfo[i][0] + ": " + mapInfo[i][1].length  );
+      }
+
+    }
+
+    return list;
+
+  }
+
   readData() {
 
     if( this.dataPointer >= this.data.length ) {
@@ -1688,23 +2637,84 @@ class BasicRuntime {
   }
 
 
+  getDataLength() {
+
+    return this.data.length;
+
+  }
+
+  setData( label0 ) {
+    var label = label0;
+    if( ! label ) {
+      label = "default";
+    }
+
+    this.data = this.loadedData[ label ];
+    this.dataPointer = 0;
+
+  }
+
+  insertData( data, type, label0 ) {
+
+    //this.loadedData = { default: [] };
+    var label = label0;
+    if( ! label ) {
+      label = "default";
+    }
+    this.loadedLabel = label;
+    this.dataPointer = 0;
+
+    var arr = [];
+    this.loadedData[label ] = arr;
+
+    var typeParts = type.split(":");
+    var typeData = typeParts[0].toUpperCase();
+    var dataSyntax = typeParts[1].toUpperCase();
+
+    this["parseSimpleData" + typeData + "_" + dataSyntax]( data, arr );
+
+    this.data = arr;
+  }
+
+
+  parseSimpleDataI_CSV( data, toArr ) {
+    var data2 = data.replaceAll(" ","").replaceAll("\t","").replaceAll("\r","").replaceAll("\n","");
+    data2 = data2.split(",");
+    for( var i=0; i<data2.length; i++) {
+      toArr.push( data2[ i ] );
+    }
+
+  }
+
+
+  parseSimpleDataS_CSV( data, toArr ) {
+    var data2 = data.replaceAll(" ","").replaceAll("\t","").replaceAll("\r","").replaceAll("\n","");
+    data2 = data2.split(",");
+    for( var i=0; i<data2.length; i++) {
+      toArr.push( data2[ i ] );
+    }
+
+  }
+
+  parseSimpleDataS_LINES( data, toArr ) {
+    var data2;
+    data2 = data.split("\n");
+    for( var i=0; i<data2.length; i++) {
+      toArr.push( data2[ i ] );
+    }
+
+  }
+
   printChar( c  ) {
     this.output.write( c );
   }
 
   listCodeLine( rawLine ) {
+    if( rawLine === undefined ) {
+        this.printLine( "???" );
+        return;
+    }
 
-    var inString = false;
-/*    for( var i=0; i<rawLine.length; i++ ) {
-
-      var c = rawLine.charAt(i);
-
-      this.printChar( c );
-
-      if( c == "\"" ) {
-        inString = !inString;
-      }
-    }*/
     this.printLine( rawLine );
 
   }
@@ -1724,6 +2734,7 @@ class BasicRuntime {
     if( ! ( renumbering === undefined )) {
 
       var foundGoto = false;
+      var foundGotoIndex = 0;
       for( i = 0; i<tokens.length; i++) {
         if( tokens[i].type == "name" && (tokens[i].data == "GOTO" || tokens[i].data == "GOSUB") ) {
           foundGoto = true;
@@ -1733,14 +2744,16 @@ class BasicRuntime {
                 tokens[i-1].type == "pad" &&
                 tokens[i-2].type == "name" && tokens[i-2].data == "THEN" ) {
               foundGoto = true;
+              foundGotoIndex = i;
             }
             else if( tokens[i].type == "num" && tokens[i-1].type == "name" && tokens[i-1].data == "THEN" ) {
               foundGoto = true;
+              foundGotoIndex = i;
             }
           }
         }
 
-        if( tokens[i].type == "num" && foundGoto ) {
+        if( tokens[i].type == "num" && foundGoto &&  i == (foundGotoIndex + 1)) {
           var newLine = renumbering[ "old_" + tokens[i].data ];
           if( newLine == undefined ) { newLine = 99999;}
           tokens[i].data =newLine;
@@ -1822,6 +2835,18 @@ class BasicRuntime {
     return false;
   }
 
+  lineIsSub( line ) {
+    console.log( line );
+    if( line[1].length == 1 ) {
+      if( ! ( line[1][0].controlKW === undefined) ) {
+        if( line[1][0].controlKW.toUpperCase() == "SUB" ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   renumberProgram( start, gap ) {
 
     var p = this.program;
@@ -1830,7 +2855,7 @@ class BasicRuntime {
     var renumbering = {};
     var lineNumbers = [];
 
-    var method = "rem";
+    var method = "sub";
 
     if( method  == "plain" ) {
       for( var i=0; i<p.length; i++) {
@@ -1901,7 +2926,27 @@ class BasicRuntime {
       }
 
     }
+    else if( method  == "sub" ) {
+      // non data
+      for( var i=0; i<p.length; i++) {
+          var line = p[ i ];
+          var rem = this.lineIsSub( line );
 
+          if( rem ) {
+            var kNumber = Math.ceil( newLineNr / 1000 );
+            var newLineNr2 = 1000 * ( kNumber  );
+            if( newLineNr2 - newLineNr  < 100 ) {
+              newLineNr2+=1000;
+            }
+            newLineNr = newLineNr2;
+          }
+          renumbering["old_" + line[0]] = newLineNr;
+          lineNumbers.push( newLineNr );
+          newLineNr += gap;
+
+      }
+
+    }
     //newLineNr = start;
     for( var i=0; i<p.length; i++) {
         newLineNr = lineNumbers[ i ]
@@ -1959,26 +3004,43 @@ class BasicRuntime {
   }
 
   clrPGM() {
-    this.vars = [];
+    this.vars = {};
     this.functions = [];
     this.restoreDataPtr();
   }
 
   restoreDataPtr() {
     this.dataPointer = 0;
+    this.data = this.loadedData[ "default" ];
+  }
+
+  normalizeData( dataRec ) {
+    var data = dataRec.data;
+
+    if( dataRec.type == "num" ) {
+      if( (typeof data).toLowerCase() == "string" ) {
+        data = parseInt( data );
+      }
+    }
+    else {
+      if( (typeof data).toLowerCase() == "number" ) {
+        data = "" + data ;
+      }
+    }
+
+    return data;
   }
 
   runPGM() {
 
     this.executeLineFlag = false;
-
+    this.stopAfterMessage = false;
 
     if( this.startAsGoto ) {
         this.startAsGoto = false;
 
         var bak1 = this.runPointer;
         var bak2 = this.runPointer2;
-
 
         this.runPGM();
 
@@ -1990,14 +3052,24 @@ class BasicRuntime {
     }
 
     this.input.setInterActive( false);
+    this.input.flush();
 
     var c = this.output;
     var p = this.program;
-    this.data = [];
-    this.dataPointer = 0;
+
+    this.loadedData[ "default" ] = [];
+    this.restoreDataPtr();
+
     this.gosubReturn = [];
-    this.vars = [];
+    this.scopes = [];
+    this.newScope( "global", {} );
     this.functions = [];
+    this.handlers = {}
+    this.labels = {};
+    this.traceList = [];
+    this.traceOldValues = {};
+
+    var normalize = this.normalizeData;
 
     for( var i=0; i<p.length; i++) {
 
@@ -2010,8 +3082,22 @@ class BasicRuntime {
 
           if( command.type  == "control" && command.controlKW == "data") {
             for( var k=0; k<command.params.length; k++) {
-              this.data.push( command.params[k] );
+              this.loadedData[ "default" ].push( normalize( command.params[k] ) );
             }
+          }
+          else if( command.type  == "control" && command.controlKW == "on") {
+            if( command.params[0] == "interrupt1") {
+              this.handlers.interrupt1 = command.params[1];
+              this.handlers.interrupt1ParamIsLabel = command.label;
+            }
+            else if( command.params[0] == "interrupt0") {
+              this.handlers.interrupt0 = command.params[1];
+              this.handlers.interrupt0ParamIsLabel = command.label;
+            }
+          }
+          else if( command.type  == "control" && command.controlKW == "sub") {
+            var label = command.label;
+            this.labels[ label ] = parseInt(line[0]);
           }
         }
     }
@@ -2024,19 +3110,32 @@ class BasicRuntime {
     if( this.program.length > 0) {
       this.runFlag = true;
       this.inputFlag = false;
-      //c.clearCursor();
       this.runPointer = 0;
       this.runPointer2 = 0;
+      this.waitForMessageFlag = false;
+      this.interruptFlag0 = false;
+      this.interruptFlag1 = false;
+
     }
     else {
       this.runFlag = false;
       this.inputFlag = false;
       this.runPointer = 0;
       this.runPointer2 = 0;
+      this.waitForMessageFlag = false;
+      this.interruptFlag0 = false;
+      this.interruptFlag1 = false;
       this.input.setInterActive( true);
-      this.printReady();
     }
+
+    this.flagStatusChange();
   }
+
+  getVars() {
+    return this.vars;
+  }
+
+
 
 
   doForInit( from, to, step, varName, cmdPointer, cmdArrayLen, linePointersLen ) {
@@ -2208,7 +3307,12 @@ class BasicRuntime {
       var cmd=cmds[i];
 
       var l=this.program[this.runPointer];
-
+      if( l ) {
+        //console.log( l[0] );
+        if(parseInt(l[0]) == 3155 ) {
+          console.log("bump");
+        }
+      }
       //if( this.runPointer > -1 ) {
       //  console.log( l[0] + "(" + this.runPointer + ":" + i +")" + this.commandToString( cmd ) );
       //}
@@ -2233,25 +3337,37 @@ class BasicRuntime {
         }
         else if( cn == "on" ) {
           var onCommand = cmd.params[ 0 ];
-          var onExpr = cmd.params[ 1 ];
-          var onLineNrs = cmd.params[ 2 ];
 
-          var value = this.evalExpression( onExpr );
-          if( (value-1)>=0 && (value-1)<onLineNrs.length ) {
-            if( onCommand == "goto" ) {
-              this.goto( onLineNrs[ (value-1) ] );
-              return [TERMINATE_W_JUMP,i+1,cnt+1];
-            }
-            else if( onCommand == "gosub" ) {
-              this.gosub( onLineNrs[ (value-1) ], i );
-              return [TERMINATE_W_JUMP,i+1,cnt+1];
+          if( onCommand != "interrupt0"  && onCommand != "interrupt1" ) {
+            var onExpr = cmd.params[ 1 ];
+            var onLineNrs = cmd.params[ 2 ];
+
+            var value = this.evalExpression( onExpr );
+            if( (value-1)>=0 && (value-1)<onLineNrs.length ) {
+              if( onCommand == "goto" ) {
+                this.goto( onLineNrs[ (value-1) ] );
+                return [TERMINATE_W_JUMP,i+1,cnt+1];
+              }
+              else if( onCommand == "gosub" ) {
+                this.gosub( onLineNrs[ (value-1) ], i );
+                return [TERMINATE_W_JUMP,i+1,cnt+1];
+              }
             }
           }
 
           //if not jumping, do nothing
         }
         else if( cn == "return" ) {
-          this.doReturn();
+
+          if( this.interruptFlag0 || this.interruptFlag1) {
+
+            this.doInterruptReturn();
+
+          }
+          else {
+            this.doReturn();
+          }
+
           return [TERMINATE_W_JUMP,i+1,cnt+1];
         }
         else if( cn == "if" ) {
@@ -2271,6 +3387,9 @@ class BasicRuntime {
           //Nothing
         }
         else if( cn == "rem" ) {
+          return [LINE_FINISHED,i+1,cnt+1];
+        }
+        else if( cn == "sub" ) {
           return [LINE_FINISHED,i+1,cnt+1];
         }
         else if( cn == "for:init" ) {
@@ -2338,7 +3457,6 @@ class BasicRuntime {
         var values = [];
         var pardefs = [];
         var mycommands = commands;
-
         var stc = mycommands[ "_stat_" + cmd.statementName.toLowerCase()];
 
         if( stc === undefined ) {
@@ -2410,11 +3528,11 @@ class BasicRuntime {
 
           if( this.erh.isSerializedError( e ) ) {
             var err = this.erh.fromSerializedError( e );
-            this.printError( err.clazz );
+            this.printError( err.clazz, false, false, err.detail );
           }
           else if( this.erh.isError( e ) ) {
             var err = e;
-            this.printError( err.clazz );
+            this.printError( err.clazz, false, false, err.detail );
           }
           else {
             this.printError("unexpected " + e );
@@ -2495,15 +3613,48 @@ class BasicRuntime {
 
   }
 
+  newScope( name, data ) {
+    var scope = { name: name, vars: {}, data: data };
+    this.scopes.push( scope );
+    this.vars = scope.vars;
+    this.scope = scope;
+  }
+
+  closeScope() {
+    this.scopes.pop();
+    this.vars = this.scopes[ this.scopes.length - 1 ].vars;
+  }
+
   setVar( a, b ) {
     this.vars[ a ] = b;
   }
 
-  old( linenr ) {
+  getTraceList() {
+    if( this.traceList === undefined ) {
+      return [];
+    }
+
+    return this.traceList;
+  }
+
+  setTraceVar( v ) {
+    if( this.traceVars === undefined ) {
+        this.traceVars = [];
+    }
+    this.traceVars.push( v.toUpperCase() );
+
+  }
+
+  resetTraceVar( v ) {
+    this.traceVars = undefined;
+  }
+
+
+  old( ) {
     this.program = this.oldProgram;
   }
 
-  new( linenr ) {
+  new( ) {
     this.oldProgram = this.program ;
     this.program = [];
   }
@@ -2540,12 +3691,12 @@ class BasicRuntime {
   }
 
 
-  insertPgmLine( linenr, commands, raw ) {
+  insertPgmLine( linenr, commands, handlers, raw ) {
 
-    this.insertPgmLineLocal( linenr, commands, raw, this.program );
+    this.insertPgmLineLocal( linenr, commands, handlers, raw, this.program );
   }
 
-  insertPgmLineLocal( linenr, commands, raw, myProgram ) {
+  insertPgmLineLocal( linenr, commands, handlers, raw, myProgram ) {
 
     for( var i=0; i<myProgram.length; i++) {
       var pl=myProgram[i];
@@ -2555,7 +3706,7 @@ class BasicRuntime {
       }
     }
 
-    myProgram.push( [linenr, commands, raw.trim() ]);
+    myProgram.push( [linenr, commands, raw.trim(), handlers ]);
 
     var sortF = function compare( a, b ) {
       return a[0] - b[0];
@@ -2568,6 +3719,7 @@ class BasicRuntime {
   textLinesToBas( lines ) {
 
     var myProgram = [];
+    var exception = undefined;
 
     if( this.debugFlag ) {
       console.log( "textLinesToBas" );
@@ -2577,16 +3729,32 @@ class BasicRuntime {
       var line = this.prepareLineForImport( lines[ i ] );
       var p = new Parser( this.commands, this.extendedcommands );
       p.init();
-      //if( line.length > 80 ) {  TODO move this check into the parser
-      //  throw "Line to long " + line;
-      //}
-      var l = p.parseLine( line );
+
+      var l = null;
+
+      try {
+          l = p.parseLine( line );
+      }
+      catch ( e ) {
+        if( exception === undefined ) {
+            exception = e;
+        }
+
+        try {
+          l = p.parseErrorLine( line );
+        }
+        catch ( e ) {
+            this.printError( "unexpected text (at "+i+")", true );
+            console.log("Illegal Line: ", line );
+        }
+      }
+
       if( l == null ) {
         continue;
       }
       if( l.lineNumber != -1 ) {
         if( l.commands.length > 0) {
-          this.insertPgmLineLocal( l.lineNumber, l.commands, l.raw, myProgram);
+          this.insertPgmLineLocal( l.lineNumber, l.commands, l.handlers, l.raw,  myProgram);
           //this.program[ l.lineNumber ] = [l.commands,l.raw];
         }
         else {
@@ -2602,11 +3770,11 @@ class BasicRuntime {
         console.log("Line: ", l );
       }
     }
-    return myProgram;
+    return { pgm: myProgram, exception: exception };
   }
 
   printReady() {
-    this.printLine("ready.");
+    this.printLine("Ready.");
   }
 
 
@@ -2620,8 +3788,9 @@ class BasicRuntime {
     this.input.setInterActive( true);
     this.inputVarsPointer = 0;
     this.output.write( "? ");
-    this.lineInput = "";
+    this.inputStartInputPosX = this.output.getCursorPos()[0];
     this.sys.blinkMode( true );
+    this.flagStatusChange();
 
   }
 
@@ -2704,7 +3873,7 @@ class BasicRuntime {
       else {
         this.printError( "syntax", true );
       }
-      this.printLine("ready.");
+      this.printReady();
     }
     if( l == null ) {
       if( this.debugFlag ) {
@@ -2717,7 +3886,7 @@ class BasicRuntime {
 
     if( l.lineNumber != -1 ) {
       if( l.commands.length > 0) {
-        this.insertPgmLine( l.lineNumber, l.commands, l.raw);
+        this.insertPgmLine( l.lineNumber, l.commands, l.handlers, l.raw);
       }
       else {
         this.removePgmLine( l.lineNumber  );
@@ -2751,8 +3920,8 @@ class BasicRuntime {
         this.runFlag = false;
       }
 
-      if( ! this.runFlag && ! this.listFlag) {
-        this.printLine("ready.");
+      if( ! this.runFlag && ! this.listFlag && !this.waitForMessageFlag) {
+        this.printReady();
       }
 
     }
@@ -2778,9 +3947,10 @@ class BasicRuntime {
 
 class ExtendedCommands {
 
-  constructor( runtime ) {
+  constructor( basicCmds, runtime ) {
     this.output = runtime.output;
     this.bitmap = runtime.bitmap;
+    this.audio = runtime.audio;
     this.html = runtime.html;
     this.input = runtime.input;
     this.runtime = runtime;
@@ -2789,10 +3959,11 @@ class ExtendedCommands {
     this.func = {};
     this.statementList = null;
     this.erh = new ErrorHandler();
+    this.basicCmds = basicCmds;
 
   }
 
-  getStatements() {
+  getStatements( raw ) {
 
     //TODO, why is it called so often?
     var stats = Object.getOwnPropertyNames( ExtendedCommands.prototype );
@@ -2801,21 +3972,13 @@ class ExtendedCommands {
 
     for( var i=0;i<stats.length;i++) {
       if( stats[i].startsWith("_stat_")) {
-        stats2.push( stats[i].substr(6 ).toUpperCase() );
-      }
-    }
+        if( stats[i].startsWith("_stat_info_")) { continue; }
 
-    return stats2;
-  }
+        var name = stats[i];
 
-  getFunctions() {
-    var stats = Object.getOwnPropertyNames( ExtendedCommands.prototype );
-
-    var stats2 = [];
-
-    for( var i=0;i<stats.length;i++) {
-      if( stats[i].startsWith("_fun_")) {
-        var name = stats[i].substr(5 ).toUpperCase().replace("_DLR_","$");
+        if( ! raw ) {
+            name = name.substr(6 ).toUpperCase();
+        }
 
         stats2.push( name );
       }
@@ -2824,10 +3987,196 @@ class ExtendedCommands {
     return stats2;
   }
 
-  /************************ commands ************************/
-  _stat_cls( pars ) {
-    this.output.control( 24 );
+  getFunctions( raw ) {
+    var stats = Object.getOwnPropertyNames( ExtendedCommands.prototype );
+
+    var stats2 = [];
+
+    for( var i=0;i<stats.length;i++) {
+      if( stats[i].startsWith("_fun_")) {
+        if( stats[i].startsWith("_fun_info_")) { continue; }
+
+        var name = stats[i];
+
+        if( ! raw ) {
+            name = name.substr(5 ).toUpperCase().replace("_DLR_","$");
+        }
+
+        stats2.push( name );
+      }
+    }
+
+    return stats2;
   }
+
+
+  getAllCategories() {
+    var categoryIndexes = this.basicCmds.getCategories();
+    var categoryIndexes2 = this.getCategories( categoryIndexes );
+
+    return new CommandHelp().getCategoriesNormalize( categoryIndexes2 );
+  }
+
+  getCategories( categoryIndexes ) {
+
+    return new CommandHelp().getCategoriesIntermediate( categoryIndexes, this );
+
+  }
+
+
+
+  /************************ commands ************************/
+
+
+  _stat_info_help() { return "general:Show help on commands:[<Help Category Index>]"; }
+
+  _stat_help( pars ) {
+
+  this.output.writeln("");
+  var catRecord = this.getAllCategories();
+  var lst = catRecord[0];
+  var catLists = catRecord[1];
+  var hlpctx = 1000;
+
+  if( pars.length == 1 ) {
+    hlpctx = pars[0].value;
+  }
+
+  if( hlpctx == 1000 ) {
+    this.output.writeln("------------------------------");
+    this.output.writeln(" Help Categories:");
+    this.output.writeln("------------------------------");
+    for( var i=0; i<lst.length; i++) {
+      this.output.writeln( i + " " + lst[i].toUpperCase() );
+    }
+  }
+  else {
+
+    var lbl = lst[ hlpctx ];
+    lst = catLists[ lbl ];
+    if(lst === undefined ) {
+      this.erh.throwError( "invalid help index" );
+    }
+    this.output.writeln("------------------------------");
+    this.output.writeln(" Help on Category: \"" + lbl.toUpperCase() + "\"");
+    this.output.writeln("------------------------------");
+    for( var i=0; i<lst.length; i++) {
+      //this.context.printLine( ((hlpctx * 100) + i) + " " + lst[i] );
+      var attr = lst[i].attribs;
+      var padLen = 11-lst[i].name.length;
+      var pad = "               ".substr(0,padLen );
+
+
+      if( attr.description ) {
+          this.output.writeln( " " + lst[i].name  + pad + " ; " + attr.description );
+      }
+      else {
+          this.output.writeln( " " + lst[i].name  );
+      }
+      if( attr.input ) {
+        var lines = attr.input.split("\n");
+
+        this.output.writeln( "               input : " + lines[0] );
+        for( var l=1; l<lines.length; l++) {
+            var line = lines[ l ];
+
+            this.output.writeln( "                       " + line );
+          }
+          this.output.writeln( "" );
+        }
+
+        if( attr.output ) {
+          var lines = attr.output.split("\n");
+
+          this.output.writeln( "               output : " + lines[0] );
+          for( var l=1; l<lines.length; l++) {
+              var line = lines[ l ];
+
+              this.output.writeln( "                       " + line );
+            }
+            this.output.writeln( "" );
+        }
+      }
+    }
+  this.output.writeln("");
+
+  }
+
+  _if_cls() {
+    var EXPR = 0, PAR = 1, RAW=2;
+    return [RAW];
+  }
+
+  _stat_info_cls() { return "general:Clears the screen:[<Reset Screen Flag>]"; }
+
+  _stat_cls( pars ) {
+    var reset = false;
+
+    if( pars.length > 1 ) {
+      throw "parameters";
+    }
+    if( pars.length == 1 && pars[0].parts.length > 1 ) {
+      throw "parameters";
+    }
+    if( pars.length == 1 && pars[0].parts.length == 1 ) {
+      if( pars[0].parts[0].data.toUpperCase() == "RESET" ) {
+          reset = true;
+      }
+      else {
+        throw "parameters";
+      }
+    }
+
+    if( reset ) {
+      this.output.control( 12 );
+    }
+    else {
+      this.output.control( 24 );
+    }
+  }
+
+  _stat_info_reset() { return "general:Resets the audio and the terminal:[ mode (0=screen, 1=audio, 2=all) ]"; }
+  _stat_reset( pars ) {
+
+    if( pars.length == 0 ) {
+      this.output.reset();
+      this.audio.reset();
+      this.runtime.resetTraceVar();
+      return;
+    }
+
+    var mode = pars[0].value;
+
+    if( mode != 0 && mode != 1 && mode != 2 ) {
+      this.erh.throwError( "mode", "only 0, 1, 2 supported" );
+      return
+    }
+
+    if( mode == 0) {
+      this.output.reset();
+    }
+    if( mode == 1) {
+      this.audio.reset();
+    }
+    else  {
+      this.output.reset();
+      this.audio.reset();
+    }
+
+  }
+
+
+  _stat_info_menu() { return "general:Enable the programmers menu"; }
+  _stat_menu( pars ) {
+
+    if( pars.length == 0 ) {
+      this.runtime.toggleMenu();
+      return;
+    }
+
+  }
+
+  _stat_info_reverse() { return "print:Reverse the print output:reverse-flag"; }
 
   _stat_reverse( pars ) {
 
@@ -2845,6 +4194,203 @@ class ExtendedCommands {
   }
 
 
+
+
+  _stat_info_beep() { return "sound:Make a short sound:channel,frequency,length"; }
+  _stat_beep( pars ) {
+
+
+    if( pars.length == 0 ) {
+      this.audio.playBeep( 0, 440, 100 );
+
+      return
+    }
+
+    if( pars.length != 3) {
+      this.erh.throwError( "parameter count", "expected channel, freq, time" );
+      return
+    }
+
+    this.audio.playBeep( pars[0].value, pars[1].value, pars[2].value );
+
+  }
+
+
+
+  _stat_info_sound() { return "sound:Make a pre defined sound:channel,frequency,length"; }
+  _stat_sound( pars ) {
+
+    if( pars.length == 0 ) {
+      this.audio.playSound( 0, 440, 100 );
+
+      return
+    }
+
+    if( pars.length != 3) {
+      this.erh.throwError( "parameter count", "expected channel, freq, time" );
+      return
+    }
+
+    this.audio.playSound( pars[0].value, pars[1].value, pars[2].value );
+
+  }
+
+
+  _stat_info_setadr() { return "sound:Define Attach,Decay and Release:channel, attackT, decayT, releaseT"; }
+  _stat_setadr( pars ) {
+
+
+    if( pars.length != 4) {
+      this.erh.throwError( "parameter count", "expected channel, attackT, decayT, releaseT" );
+      return
+    }
+
+    this.audio.attackDecayRelease(
+       pars[0].value,
+       pars[1].value,
+       pars[2].value,
+       pars[3].value
+      );
+
+  }
+
+  _stat_info_volume() { return "sound:Change the audio volume:volume"; }
+  _stat_volume( pars ) {
+
+    if( pars.length != 1) {
+      this.erh.throwError( "parameter count", "expected volume" );
+      return
+    }
+
+    this.audio.volume( pars[0].value );
+
+  }
+
+  _stat_info_chfreq() { return "sound:Change the channel audio frequency:channel, frequency"; }
+  _stat_chfreq( pars ) {
+
+    if( pars.length != 2) {
+      this.erh.throwError( "parameter count", "expected channel, frequency" );
+      return
+    }
+
+    this.audio.channelFrequency( pars[0].value, pars[1].value );
+
+  }
+
+  _stat_info_chvolume() { return "sound:Change the channel audio volume:channel, volume"; }
+  _stat_chvolume( pars ) {
+
+    if( pars.length != 2) {
+      this.erh.throwError( "parameter count", "expected channel, volume" );
+      return
+    }
+
+    this.audio.channelVolume( pars[0].value, pars[1].value );
+
+  }
+
+  _stat_info_chsvolume() { return "sound:Change the channel sustain volume:channel, volume"; }
+  _stat_chsvolume( pars ) {
+
+    if( pars.length != 2) {
+      this.erh.throwError( "parameter count", "expected channel, volume" );
+      return
+    }
+
+    this.audio.channelSustainVolume( pars[0].value, pars[1].value );
+
+  }
+
+  _stat_info_addfx() { return "sound:Add a Sound FX part to the channel:channel, type, value, time"; }
+  _stat_addfx( pars ) {
+
+    if( pars.length != 4) {
+      this.erh.throwError( "parameter count", "expected channel, type, value and time(ms)" );
+      return
+    }
+
+    this.audio.addEffect(
+        pars[0].value,
+        pars[1].value,
+        pars[2].value,
+        pars[3].value
+       );
+
+  }
+
+  _stat_info_clearfx() { return "sound:Clear a sound effect:channel"; }
+  _stat_clearfx( pars ) {
+
+    if( pars.length != 1) {
+      this.erh.throwError( "parameter count", "expected channel" );
+      return
+    }
+
+    this.audio.clearEffect( pars[0].value  );
+
+  }
+
+  _stat_info_playfx() { return "sound:Change the channel sustain volume:channel [,frequency ]"; }
+  _stat_playfx( pars ) {
+
+    if( pars.length < 1 || pars.length >2 ) {
+      this.erh.throwError( "parameter count", "expected channel [,frequency ]" );
+      return
+    }
+
+    var freq = 0;
+    if( pars.length >1 ) {
+      freq = pars[1].value;
+    }
+
+    this.audio.playEffect( pars[0].value, freq );
+
+  }
+
+
+  _stat_info_textarea() { return "print:Limit text to certain area: <CollSize>,<RowSize>\n [,<xOffset>,<yOffset>]"; }
+  _stat_textarea( pars ) {
+
+    var result;
+
+    if( pars.length != 2 && pars.length != 4) {
+      this.erh.throwError( "parameter count", "expected cols, rows [, xoffset, yoffset ]" );
+      return
+    }
+
+    var cols = Math.round( pars[0].value );
+    var rows = Math.round( pars[1].value );
+
+    var wh = this.output.getDimensions();
+
+    var xo, yo;
+    xo = -1, yo = -1;
+    if( pars.length == 4) {
+      var xo = Math.round( pars[2].value );
+      var yo = Math.round( pars[3].value );
+    }
+
+    if( cols > 0 && rows > 0  && cols <= wh[0] && rows <= wh[1] ) {
+
+        var divx = wh[0] - cols;
+        var divy = wh[1] - rows;
+
+        if( xo > 0 && xo > divx ) {
+          this.erh.throwError( "parameter", "xo to big");
+        }
+        if( yo > 0 && yo > divy ) {
+          this.erh.throwError( "parameter", "yo to big");
+        }
+
+        this.output.textArea(  cols, rows, xo, yo );
+
+        return
+    }
+
+  }
+
+  _stat_info_gcolor() { return "graphics:Set graphics pen color index:<Color Index>"; }
   _stat_gcolor( pars ) {
 
     var result;
@@ -2855,14 +4401,49 @@ class ExtendedCommands {
     }
 
     if( pars.length == 1) {
-        var col = pars[0].value;
-        this.bitmap.setLineColor( col );
+        var col = Math.round( pars[0].value );
+        if( col > 0 && col < 16) {
+            this.bitmap.setLineColor(  col );
+        }
         return
     }
 
   }
 
 
+
+  _stat_info_origin() { return "graphics:Specify origin of graphics console:<x0>,<y0>,<dx>,<dy>"; }
+  _stat_origin( pars ) {
+    if( pars.length != 4 ) {
+      this.erh.throwError( "parameter count", "expected 4 (x0,y0,dx,dy), not " + pars.length );
+      return;
+    }
+
+    if( !this.bitmap.isActive() ) {
+      this.erh.throwError( "invalid display mode", "current mode cannot show graphics" );
+      return;
+    }
+
+    if( pars[2].value != 1 && pars[2].value != -1 ) {
+      this.erh.throwError( "parameter", "dx must be 1 or -1" );
+      return;
+    }
+
+    if( pars[3].value != 1 && pars[3].value != -1 ) {
+      this.erh.throwError( "parameter", "dy must be 1 or -1" );
+      return;
+    }
+
+    this.bitmap.origin(
+      pars[0].value,
+      pars[1].value,
+      pars[2].value,
+      pars[3].value
+
+    );
+  }
+
+  _stat_info_line() { return "graphics:Draw a line:<x0>,<y0>,<x1>,<y1>"; }
   _stat_line( pars ) {
     if( pars.length != 4 ) {
       this.erh.throwError( "parameter count", "expected 2 (x0,y0,y1,y1), not " + pars.length );
@@ -2883,6 +4464,7 @@ class ExtendedCommands {
     );
   }
 
+  _stat_info_plot() { return "graphics:Plot a pixel:<x0>,<y0>,<x1>,<y1>"; }
   _stat_plot( pars ) {
     if( pars.length != 2 ) {
       this.erh.throwError( "parameter count", "expected 2 (x,y), not " + pars.length );
@@ -2897,6 +4479,7 @@ class ExtendedCommands {
     this.bitmap.plot( pars[0].value, pars[1].value );
   }
 
+  _stat_info_center() { return "print:Print horizontal center:<String to Print>"; }
   _stat_center( pars ) {
 
     var string;
@@ -2916,6 +4499,97 @@ class ExtendedCommands {
   }
 
 
+  _stat_info_gtext() { return "graphics:Write text at position x,y:X,Y,TEXT"; }
+  _stat_gtext( pars ) {
+
+    var string;
+
+    if( pars.length != 3 ) {
+      this.erh.throwError( "parameters", "expected x,y and text parameters, not " + pars.length );
+      return;
+    }
+
+    this.output.gtext( pars[0].value, pars[1].value, pars[2].value );
+  }
+
+
+  _stat_info_immediate() { return "poke:Set flag to flush the render pipeline after each poke:<RenderImmediateFlag>"; }
+  _stat_immediate( pars ) {
+
+    var row = -1, col = -1;
+
+    if( pars.length != 1) {
+      this.erh.throwError( "parameters", "expected 1 parameters, not " + pars.length );
+      return;
+    }
+
+    this.output.setPokeFlush( pars[0].value != 0 );
+  }
+
+
+  _stat_info_pokeccl() { return "poke:Put a character directly into the screen buffer:<Y>,<X>,<Code>,<FGColor>,<BGColor>"; }
+  _stat_pokeccl( pars ) {
+
+    var row = -1, col = -1;
+
+    if( pars.length < 3 ) {
+      this.erh.throwError( "parameters", "expected at least 3 parameters, not " + pars.length );
+      return;
+    }
+
+    var fg = undefined;
+    var bg = undefined;
+
+    if( pars.length >= 4 ) { fg = pars[3].value; }
+    if( pars.length >= 5 ) { bg = pars[4].value; }
+    this.output.pokeccl( pars[0].value, pars[1].value, pars[2].value, fg, bg );
+  }
+
+  _stat_info_pokec() { return "poke:Put a character directly into the screen buffer:<Y>,<X>,<Code>"; }
+  _stat_pokec( pars ) {
+
+    var row = -1, col = -1;
+
+    if( pars.length != 3 ) {
+      this.erh.throwError( "parameters", "expected 3 parameters, not " + pars.length );
+      return;
+    }
+
+    this.output.pokec( pars[0].value, pars[1].value, pars[2].value );
+  }
+
+  _stat_info_pokecl() { return "poke:Put color directly into the screen buffer:<X>,<Y>,<FGColor>[,<BGColor>]"; }
+  _stat_pokecl( pars ) {
+
+    var row = -1, col = -1;
+    var bg = undefined;
+
+    if( pars.length != 3 &&  pars.length != 4 ) {
+      this.erh.throwError( "parameters", "expected 3 or 4 parameters, not " + pars.length );
+      return;
+    }
+
+    if( pars.length == 4 ) {
+      bg = pars[3].value;
+    }
+
+    this.output.pokecl( pars[0].value, pars[1].value, pars[2].value, bg );
+  }
+
+  _stat_info_pokebcl() { return "poke:Put background color directly into the screen buffer:<Y>,<X>,<BGColor>"; }
+  _stat_pokebcl( pars ) {
+
+    var row = -1, col = -1;
+
+    if( pars.length != 3 ) {
+      this.erh.throwError( "parameters", "expected 3 parameters, not " + pars.length );
+      return;
+    }
+
+    this.output.pokecl( pars[0].value, pars[1].value, undefined, pars[2].value );
+  }
+
+  _stat_info_locate() { return "print:Set the cursor position:<Y>,<X>"; }
   _stat_locate( pars ) {
 
     var row = -1, col = -1;
@@ -2940,15 +4614,18 @@ class ExtendedCommands {
     this.output.setCursorPos( col, row );
   }
 
+  _stat_info_hide() { return "general:Hide the terminal"; }
   _stat_hide( pars ) {
     this.output.control( 25 );
   }
+
 
   _if_html() {
       var EXPR = 0, PAR = 1, RAW=2;
       return [RAW];
   }
 
+  _stat_info_html() { return "html:Unsupported command"; }
   _stat_html( pars ) {
     var html = this.html;
 
@@ -3006,6 +4683,7 @@ class ExtendedCommands {
       );
   }
 
+  _stat_info_htmlnode() { return "html:Unsupported command"; }
   _stat_htmlnode( pars ) {
 
     var result;
@@ -3020,6 +4698,23 @@ class ExtendedCommands {
 
   }
 
+
+  _stat_info_htmlbg() { return "html:Unsupported command"; }
+  _stat_htmlbg( pars ) {
+
+    var result;
+
+    if( pars.length == 0) {
+        return
+    }
+
+    var url = pars[0].value;
+
+    this.html.executeFunction( "body.style.backgroundImage", url );
+
+  }
+
+  _stat_info_color() { return "print:Sets the console color index:<Pen Color>[, <Paper Color>\n[, <Border Color>]]"; }
   _stat_color( pars ) {
 
     var result;
@@ -3047,11 +4742,25 @@ class ExtendedCommands {
 
   }
 
+  _stat_info_display() { return "general:Set the console display mode:<Display Mode Number>"; }
   _stat_display( pars ) {
 
     var result;
+    var modes = this.sys.screenModes;
 
     if( pars.length == 0) {
+
+        var list = [ ];
+
+
+        for( var i=0 ; i<modes.length ; i++) {
+          if( modes[ i] ) {
+            list.push( i + ":   " + modes[i]);
+          }
+        }
+        //list.push( "Current Mode: " + this.sys.displayMode );
+
+        this.runtime.enterListMode( list );
         return
     }
 
@@ -3060,13 +4769,18 @@ class ExtendedCommands {
     }
 
     var mode = pars[0].value;
-    this.sys.setDisplayMode( this.runtime, mode   );
+    if( modes[mode] === undefined ) {
+      this.erh.throwError( "Invalid mode", "No such display mode" );
+    }
+    this.sys.setDisplayMode( this.runtime, mode );
+    this.sys.blinkMode( !this.runtime.isRunning() );
+    this.runtime.flagStatusChange();
     this.runtime.startWaitForMessage( "displaysize" )
 
 
   }
 
-
+  _stat_info_border() { return "general:Changes the border color:<Color Index>"; }
   _stat_border( pars ) {
 
     var result;
@@ -3084,17 +4798,86 @@ class ExtendedCommands {
 
   }
 
+  _stat_info_export() { return "program:Export program for download"; }
   _stat_export( pars ) {
     if( pars.length > 0) {
         this.erh.throwError( "too many parameters", "export needs no parameters" );
     }
 
     var code = this.runtime.getProgramAsText();
-    this.sys.export( code );
+    this.sys.export( code, "disk" );
   }
 
-  _fun_uc_DLR_( pars ) {
+  _stat_info_copy() { return "program:Copy program to clipboard"; }
+  _stat_copy( pars ) {
+    if( pars.length > 0) {
+        this.erh.throwError( "too many parameters", "copy needs no parameters" );
+    }
 
+    var code = this.runtime.getProgramAsText();
+    this.sys.export( code, "clipboard" );
+    this.runtime.printLine("Copied " + this.runtime.getProgramSize() + " program lines to the clipboard" );
+  }
+
+
+  _fun_info_peekcl() { return "poke:Get color information directly from from screen buffer:<Y>,<X>[,<Mode]"; }
+  _fun_peekcl( pars ) {
+
+    var row = -1, col = -1;
+    var mode = 0;
+
+    if( pars.length != 3  && pars.length != 2 ) {
+      this.erh.throwError( "parameters", "expected 2 or 3 parameters, not " + pars.length );
+      return;
+    }
+
+    if( pars.length == 3 ) {
+      mode = pars[2].value;
+    }
+    return this.output.peekcl( pars[0].value, pars[1].value, mode );
+  }
+
+
+  _fun_info_peekc() { return "poke:Get a character directly into from screen buffer:<Y>,<X>"; }
+  _fun_peekc( pars ) {
+
+    var row = -1, col = -1;
+
+    if( pars.length != 2 ) {
+      this.erh.throwError( "parameters", "expected 2 parameters, not " + pars.length );
+      return;
+    }
+
+    return this.output.peekc( pars[0].value, pars[1].value );
+  }
+
+
+  _fun_info_ucbase() { return "string:Return unicode-set base character code:<UC-Setname$>"; }
+  _fun_ucbase( pars ) {
+
+    if( pars.length != 1 ) {
+      this.erh.throwError( "parameters", "UCBASE() needs one parameter" );
+    }
+
+    var baseLabel = pars[0].value;
+
+    if( baseLabel.toLowerCase() == "box" ) {
+      return parseInt( "2500", 16 );
+    }
+    else if( baseLabel.toLowerCase() == "blocks" ) {
+      return parseInt( "2580", 16 );
+    }
+    else if( baseLabel.toLowerCase() == "symbol" ) {
+      return parseInt( "2b00", 16 ); //can be too wide
+    }
+    else if( baseLabel.toLowerCase() == "legacy" ) {
+      return parseInt( "1fb00", 16 );
+    }
+    return 0;
+  }
+
+  _fun_info_uc_DLR_() { return "string:Create unicode character:<UnicodeHexCode$>"; }
+  _fun_uc_DLR_( pars ) {
 
     if( pars[0].value ) {
       if( typeof pars[0].value == "string" ) {
@@ -3105,6 +4888,7 @@ class ExtendedCommands {
     return "?";
   }
 
+  _fun_info_dc_DLR_() { return "print:Return device control char. sequence:<Parameter1>, <Parameter2>"; }
   _fun_dc_DLR_( pars ) {
 
     var val = "";
@@ -3114,12 +4898,14 @@ class ExtendedCommands {
     return val;
   }
 
+  _fun_info_html_DLR_() { return "html:Unsupported function"; }
   _fun_html_DLR_( pars ) {
     return
       this.html.get();
   }
 
 
+  _fun_info_width() { return "general:Return the console width in pixels"; }
   _fun_width( pars ) {
 
     if( pars.length != 0 ) {
@@ -3130,6 +4916,7 @@ class ExtendedCommands {
     return wh[0];
   }
 
+  _fun_info_height() { return "general:Return the console height in pixels"; }
   _fun_height( pars ) {
 
     if( pars.length != 0 ) {
@@ -3137,9 +4924,10 @@ class ExtendedCommands {
     }
 
     var wh = this.bitmap.getDimensions();
-    return wh[0];
+    return wh[1];
   }
 
+  _fun_info_cols()  { return "print:Return the console width in columns"; }
   _fun_cols( pars ) {
 
     if( pars.length != 0 ) {
@@ -3150,6 +4938,7 @@ class ExtendedCommands {
     return wh[0];
   }
 
+  _fun_info_columns() { return "print:Return the console width in columns"; }
   _fun_columns( pars ) {
 
     if( pars.length != 0 ) {
@@ -3160,6 +4949,7 @@ class ExtendedCommands {
     return wh[0];
   }
 
+  _fun_info_rows() { return "print:Return the console height in rows"; }
   _fun_rows( pars ) {
 
     if( pars.length != 0 ) {
@@ -3215,6 +5005,8 @@ class BasicCommands {
     this.statementList = null;
     this.erh = new ErrorHandler();
 
+    this.keyLabelCodes = {};
+
     this.randnrs = [];
     for(var i=0; i<10000;i++) {
       this.randnrs.push( Math.random() );
@@ -3224,34 +5016,22 @@ class BasicCommands {
 
   }
 
-  getStatements() {
+  getStatements( raw ) {
 
-    //if( this.statementList != null ) {
-    //  return this.statementList;
-    //}
-
+    //TODO, why is it called so often?
     var stats = Object.getOwnPropertyNames( BasicCommands.prototype );
 
     var stats2 = [];
 
     for( var i=0;i<stats.length;i++) {
       if( stats[i].startsWith("_stat_")) {
-        stats2.push( stats[i].substr(6 ).toUpperCase() );
-      }
-    }
+        if( stats[i].startsWith("_stat_info_")) { continue; }
 
-    //this.statementList = stats2;
-    return stats2;
-  }
+        var name = stats[i];
 
-  getFunctions() {
-    var stats = Object.getOwnPropertyNames( BasicCommands.prototype );
-
-    var stats2 = [];
-
-    for( var i=0;i<stats.length;i++) {
-      if( stats[i].startsWith("_fun_")) {
-        var name = stats[i].substr(5 ).toUpperCase().replace("_DLR_","$");
+        if( ! raw ) {
+            name = name.substr(6 ).toUpperCase();
+        }
 
         stats2.push( name );
       }
@@ -3260,11 +5040,44 @@ class BasicCommands {
     return stats2;
   }
 
+  getFunctions( raw ) {
+    var stats = Object.getOwnPropertyNames( BasicCommands.prototype );
+
+    var stats2 = [];
+
+    for( var i=0;i<stats.length;i++) {
+      if( stats[i].startsWith("_fun_")) {
+        if( stats[i].startsWith("_fun_info_")) { continue; }
+
+        var name = stats[i];
+
+        if( ! raw ) {
+            name = name.substr(5 ).toUpperCase().replace("_DLR_","$");
+        }
+
+        stats2.push( name );
+      }
+    }
+
+    return stats2;
+  }
+
+  getCategories() {
+
+    return new CommandHelp().getCategoriesIntermediate( [{},{}], this );
+
+  }
+
+
   /************************ commands ************************/
+
+  _stat_info_new() { return "program:Delete the current program from memory:"; }
   _stat_new( pars ) {
+
     this.runtime.new();
   }
 
+  _stat_info_list() { return "program:List the basic program"; }
   _stat_list( pars ) {
 
     var start = 0;
@@ -3309,6 +5122,9 @@ class BasicCommands {
 
         var lineNr = parseInt(l[0]);
         if(  l[0] == null || (lineNr>= start && lineNr<= end) ) {
+          if( l[1][0].type == "control" && l[1][0].controlKW == "sub" ) {
+              list.push( "" );
+          }
           list.push( l[2] );
         }
       }
@@ -3316,7 +5132,13 @@ class BasicCommands {
       this.runtime.enterListMode( list );
   }
 
+
   _if_get() {
+      var EXPR = 0, PAR = 1, RAW=2;
+      return [PAR];
+  }
+
+  _if_getkey() {
       var EXPR = 0, PAR = 1, RAW=2;
       return [PAR];
   }
@@ -3341,6 +5163,7 @@ class BasicCommands {
       return [RAW];
   }
 
+  _stat_info_read() { return "io:Read a value from the data::<Data$ or Data>"; }
   _stat_read( pars ) {
     var p0 = pars[ 0 ];
     if( p0.type != "var" ) {
@@ -3349,18 +5172,33 @@ class BasicCommands {
 
     var data = this.runtime.readData();
     if( data === undefined ) { this.erh.throwError( "out of data" ); }
-    else {
-      if( data.type =="num" ) {
-        this.runtime.setVar(
-          p0.value, parseInt( data.data ) );
-        }
-        else {
+
+    if( p0.varType == "num" && (typeof data).toLowerCase() == "number" ) {
           this.runtime.setVar(
-            p0.value,  data.data );
-        }
-      }
+            p0.value,  data  );
+    }
+    else if( p0.varType == "str" && (typeof data).toLowerCase() == "string" ) {
+          this.runtime.setVar(
+            p0.value,  data  );
+    }
+    else if( p0.varType == "num" && (typeof data).toLowerCase() == "string" ) {
+
+          data = parseInt ( data );
+
+          if( isNaN( data ) ) {
+            this.erh.throwError( "expected number" );
+          }
+          this.runtime.setVar(
+            p0.value, data );
+    }
+    else if( p0.varType == "str" && (typeof data).toLowerCase() == "number" ) {
+          this.runtime.setVar(
+            p0.value,  "" + data  );
+    }
+
   }
 
+  _stat_info_get() { return "io:Retrieve the last key pressed::<Key$>"; }
   _stat_get( pars ) {
     var p0 = pars[ 0 ];
 
@@ -3371,10 +5209,36 @@ class BasicCommands {
     var k = this.input.getKey();
     if( k == null ) { this.runtime.setVar(p0.value, ""); }
     else {
-      this.runtime.setVar(p0.value, k.key );
+      if( k.key != null ) {
+        this.runtime.setVar(p0.value, k.key );
+      }
+      else {
+        this.runtime.setVar(p0.value, "???" );
+      }
     }
   }
 
+  _stat_info_getkey() { return "io:Retrieve the last key pressed::<Key$>"; }
+  _stat_getkey( pars ) {
+    var p0 = pars[ 0 ];
+
+    if( p0.type != "var" ) {
+      this.erh.throwError( "not a var", "parameter 0" );
+    }
+
+    var k = this.input.getKey();
+    if( k == null ) { this.runtime.setVar(p0.value, "" ); }
+    else {
+      if( k.key != null ) {
+        this.runtime.setVar(p0.value, k.key );
+      }
+      else {
+        this.runtime.setVar(p0.value, k.keyLabel );
+      }
+    }
+  }
+
+  _stat_info_input() { return "io:Waits for the user to type in a value::<Value>"; }
   _stat_input( pars ) {
 
     var vars = [];
@@ -3411,11 +5275,192 @@ class BasicCommands {
 
   }
 
+  _stat_info_restore() { return "io:Set the READ-pointer, to the beginning:"; }
   _stat_restore( pars ) {
     this.runtime.restoreDataPtr();
   }
 
+  _stat_info_load() { return "program:Load a program in memory:<Filename>"; }
   _stat_load( pars ) {
+    var runtime = this.runtime;
+    var result;
+
+    runtime.printLine("");
+
+    if( pars.length == 0) {
+      runtime.printLine("searching");
+    }
+    else {
+      runtime.printLine("searching for \"" + pars[0].value + "\"" );
+    }
+
+    if( pars.length == 0) {
+        result = runtime.load( "*", false );
+    }
+    else {
+      result = runtime.load( pars[0].value, false );
+    }
+    this.aSync = true;
+
+  }
+
+  _stat_info_setdata() { return "io:Set data pointer:[<label>]"; }
+  _stat_setdata( pars ) {
+
+    var runtime = this.runtime;
+    var label = null;
+
+    if( pars.length > 1  ) {
+      this.erh.throwError( "parameters", "Setdata takes one optional parameter" );
+    }
+
+    if( pars.length == 1 ) {
+      label = pars[0].value ;
+    }
+
+    var list = runtime.setData( label );
+
+  }
+
+  _stat_info_datablocks() { return "io:Dump data blocks in memory"; }
+  _stat_datablocks( pars ) {
+
+    var runtime = this.runtime;
+    var result;
+
+    if( pars.length != 0 ) {
+      this.erh.throwError( "parameters", "Listdata takes no parameterss" );
+    }
+
+    var list = runtime.getDataBlocks();
+    runtime.enterListMode( list );
+
+  }
+
+  _stat_info_loaddata() { return "io:Load data in memory:<Filename> [, <Type>, <Label>]"; }
+  _stat_loaddata( pars ) {
+
+    var runtime = this.runtime;
+    var result;
+    var label = null;
+    var type = "I:CSV";
+    runtime.printLine("");
+
+    if( pars.length != 1 && pars.length != 2 && pars.length != 3 ) {
+      this.erh.throwError( "parameters", "loaddata takes one mandatory and two optional parameters" );
+    }
+
+    if( pars.length >= 2 ) {
+      type = pars[1].value ;
+    }
+
+    if( type.indexOf(":") < 0) {
+      this.erh.throwError( "invalid type specification", "Expected <Type>:<FileSyntax>. Example: \"I:CSV\"" );
+    }
+
+    if( pars.length == 3 ) {
+      label = pars[2].value ;
+    }
+
+    result = runtime.loaddata( pars[0].value, type, label );
+
+    this.aSync = true;
+
+  }
+
+
+  _stat_info_dir() { return "program:List a files on the current file system:[PATH]"; }
+  _stat_dir( pars ) {
+    var runtime = this.runtime;
+    var result;
+
+    runtime.printLine("");
+
+    if( pars.length == 0) {
+      runtime.dir( "" );
+      return;
+    }
+
+    if( pars.length == 1) {
+      runtime.dir( pars[0].value );
+      return;
+    }
+
+    this.erh.throwError( "parameter", "dir takes 0 or 1 parameter(s)"  );
+
+    this.aSync = true;
+
+  }
+
+  _stat_info_fs() { return "program:Set or List (the) filesystem(s):[<FileSystem$>]"; }
+  _stat_fs( pars ) {
+    var runtime = this.runtime;
+
+    if( pars.length == 0) {
+      runtime.listfs();
+    }
+    else if( pars.length == 1) {
+      runtime.setfs( pars[0].value );
+    }
+
+
+    this.aSync = true;
+
+  }
+
+
+  _stat_info_renumber() { return "program:Renumber the current program"; }
+  _stat_renumber( pars ) {
+
+    var runtime = this.runtime;
+    runtime.renumberProgram( 10,10 );
+
+  }
+
+  _stat_info_vars() { return "program:List all variables to the screen"; }
+  _stat_vars( pars ) {
+
+
+    var runtime = this.runtime;
+
+    var varList = runtime.getFullVarList();
+    this.runtime.enterListMode( varList );
+
+  }
+
+
+  _stat_info_tracevar() { return "program:Trace variable changes:[<\"Variable Name\">]"; }
+  _stat_tracevar( pars ) {
+
+    var runtime = this.runtime;
+
+    if( pars.length == 0) {
+      var traceList = runtime.getTraceList();
+      this.runtime.enterListMode( traceList );
+
+      return;
+    }
+
+    if( pars.length == 1) {
+      runtime.setTraceVar( pars[0].value );
+      return;
+    }
+
+  }
+
+  _stat_info_clrtracevar() { return "program:Stop tracing variables"; }
+  _stat_clrtracevar( pars ) {
+
+    var runtime = this.runtime;
+
+    if( pars.length == 0) {
+      var traceList = runtime.resetTraceVar();
+    }
+  }
+
+
+  _stat_info_boot() { return "program:Load and run a program:<FileName>"; }
+  _stat_boot( pars ) {
     var runtime = this.runtime;
     var result;
 
@@ -3429,59 +5474,46 @@ class BasicCommands {
     }
 
     if( pars.length == 0) {
-        result = runtime.load( false );
+        result = runtime.load( "*", true );
     }
     else {
-      result = runtime.load( pars[0].value );
+      result = runtime.load( pars[0].value, true );
     }
+    this.aSync = true;
 
-    if( !result ) {
-      runtime.printLine("?not found error");
-    }
-    else  {
-
-      if( !result[1] ) {  //only print when not a snapshot
-
-        if( pars.length == 0) {
-          runtime.printLine("found default");
-        }
-        else {
-          runtime.printLine("found "+pars[0].value);
-        }
-        runtime.printLine("loading");
-      }
-
-    }
   }
 
+  _stat_info_save() { return "program:Save the current program:<FileName>"; }
   _stat_save( pars ) {
     var runtime = this.runtime;
 
     if( pars.length == 0) {
-        runtime.save( false );
+        runtime.save( null );
     }
     else {
       runtime.save( pars[0].value );
     }
   }
 
-  _stat_sys( pars ) {
-    this.erh.throwError( "not supported" );
+  _stat_info_delete() { return "program:Delete a file:<FileName>"; }
+  _stat_delete( pars ) {
+    var runtime = this.runtime;
+
+    if( pars.length != 1) {
+        this.erh.throwError( "parameter", "delete without filename" );
+    }
+    else {
+      runtime.deleteFile( pars[0].value );
+    }
   }
 
-  _stat_wait( pars ) {
-    this.erh.throwError( "not supported" );
-  }
-
-  _stat_verify( pars ) {
-    this.erh.throwError( "not supported" );
-  }
-
+  _stat_info_run() { return "program:Run the current program"; }
   _stat_run( pars ) {
     var runtime = this.runtime;
 
     runtime.runPGM();
   }
+
 
   _if_print() {
       var EXPR = 0, PAR = 1, RAW=2;
@@ -3501,6 +5533,7 @@ class BasicCommands {
     return "" + x;
   }
 
+  _stat_info_print() { return "print:Print text or values to the console:<Value>[<Value>;][;]"; }
   _stat_print( pars ) {
 
     var runtime = this.runtime;
@@ -3547,6 +5580,7 @@ class BasicCommands {
           exparts2.parts.push( exparts.parts[j] );
         }
       }
+
       value = runtime.evalExpression( exparts2 );
 
       if( i == 0) {
@@ -3561,24 +5595,53 @@ class BasicCommands {
 
   }
 
-
+  _stat_info_clr() { return "program:Clear all variables"; }
   _stat_clr( pars ) {
     return this.runtime.clrPGM();
   }
 
   /************************ functions ************************/
 
+  _fun_info_datalen() { return "io:Return length of current datablock"; }
+  _fun_datalen( pars ) {
+    var runtime = this.runtime;
+    return runtime.getDataLength();
+  }
+
+  _fun_info_chr_DLR_() { return "string:Return ascii character:<Ascii Code>"; }
   _fun_chr_DLR_( pars ) {
     return String.fromCharCode( pars[0].value );
   }
 
+  _fun_info_str_DLR_() { return "string:Converts number to string: <Number>[,<Base>[,<Trim>]]"; }
   _fun_str_DLR_( pars ) {
-    if(pars[0].value>=0) {
-      return " " +  pars[0].value;
+
+    if( pars.length <1 || pars.length >3  ) {
+      this.erh.throwError( "parameter", "str$() takes 1,2 or 3 parameters"  );
     }
-    return "" +  pars[0].value;
+
+    var number = pars[0].value;
+    var base = 10;
+    var trim = false;
+
+    if( pars.length>=2  ) {
+      base = pars[1].value;
+    }
+
+    if( pars.length==3  ) {
+      trim = ( pars[1].value > 0);
+    }
+
+    var numberStr = number.toString(base);
+
+    if( number >=0 && !trim) {
+      return " " +  numberStr;
+    }
+
+    return numberStr;
   }
 
+  _fun_info_abs() { return "math:Absolute value"; }
   _fun_abs( pars ) {
     if( pars[0].value < 0 ) {
       return -pars[0].value;
@@ -3586,18 +5649,78 @@ class BasicCommands {
     return pars[0].value;
   }
 
+  _fun_info_len() { return "string:Length of a string"; }
   _fun_len( pars ) {
     return pars[0].value.length;
   }
 
+  _fun_info_asc() { return "string:ASCII value of a character"; }
   _fun_asc( pars ) {
-    return pars[0].value.charCodeAt(0);
+    if( (typeof pars[0].value).toUpperCase() == "STRING" ) {
+
+      if ( pars[0].value.length > 0) {
+          return pars[0].value.charCodeAt(0);
+      }
+    }
+    return 0;
   }
 
+  _fun_info_val() { return "string:Retrieve number from string"; }
   _fun_val( pars ) {
-    return parseInt( pars[0].value );
+    var base = 10;
+
+    if( pars.length==2  ) {
+      base = pars[1].value;
+    }
+
+    if(base < 2 || base > 16) {
+      this.erh.throwError( "base", "base should be inbetween 2 and 16" );
+    }
+
+    var val = parseInt( pars[0].value, base );
+
+    if( isNaN( val ) ) {
+      this.erh.throwError( "invalid number syntax", "Could not parse " + pars[0].value+ " with base" + base  );
+    }
+
+    return val;
   }
 
+  _fun_info_hex2dec() { return "string:Retrieve number from hexadecimal string"; }
+  _fun_hex2dec( pars ) {
+    var base = 16;
+
+    if( pars.length != 1  ) {
+      this.erh.throwError( "parameter", "HEX2DEC() needs one parameter" );
+    }
+
+    var val = parseInt( pars[0].value, base );
+
+    if( isNaN( val ) ) {
+      this.erh.throwError( "invalid number syntax", "Could not parse " + pars[0].value+ " with base" + base  );
+    }
+
+    return val;
+  }
+
+
+  _fun_info_hex_DLR_() { return "string:Format a number as a hexadecimal string"; }
+  _fun_hex_DLR_( pars ) {
+    var base = 16;
+
+    if( pars.length != 1  ) {
+      this.erh.throwError( "parameter", "HEX$() needs one parameter" );
+    }
+
+    var hexString = (pars[0].value * 1).toString(16);
+
+    return hexString;
+ }
+
+
+
+
+  _fun_info_exp() { return "math:Exponent"; }
   _fun_exp( pars ) {
     return Math.exp( pars[0].value );
   }
@@ -3646,6 +5769,47 @@ class BasicCommands {
   }
 
 
+  _fun_info_pad_DLR_() { return "string:Add string padding:<String>, <padChar>,<Length>[,<PadLeft>]"; }
+  _fun_pad_DLR_( pars ) {
+
+    if( pars.length < 3 || pars.length >4 ) {
+      this.erh.throwError( "syntax", "pad$() takes 3 or 4 parameters" );
+    }
+
+    var str = pars[0].value;
+    var ch = pars[1].value;
+    var len = pars[2].value;
+    var left = true;
+
+    if( pars.length == 4 ) {
+      left= pars[3].value;
+
+      if( left !== 0 ) {
+        left = true;
+      }
+      else { left = false; }
+    }
+
+    var dest = "";
+
+    var strLen = str.length;
+    var toPad = len-strLen;
+    for( var i = 0; i<toPad ; i++) {
+      dest += ch;
+    }
+
+    if( left ) {
+      dest = dest + str;
+    }
+    else {
+      dest = str + dest;
+    }
+
+    return dest;
+  }
+
+
+  _fun_info_rnd() { return "math:Random number between 0 and 1:<Seed Or Mode>"; }
   _fun_rnd( pars ) {
 
     if( pars.length >1) {
@@ -3663,18 +5827,22 @@ class BasicCommands {
     return this.intGetNextRand();
   }
 
+  _fun_info_sqr() { return "math:Square Root"; }
   _fun_sqr( pars ) {
     return Math.sqrt( pars[0].value);
   }
 
+  _fun_info_log() { return "math:Logaritm"; }
   _fun_log( pars ) {
     return Math.log( pars[0].value);
   }
 
+  _fun_info_pos() { return "print:Position"; }
   _fun_pos( pars ) {
     return this.runtime.getLinePos();
   }
 
+  _fun_info_left_DLR_() { return "string:Left part of the string"; }
   _fun_left_DLR_( pars ) {
       //? LEFT$(A$,8)
       var s = pars[0].value;
@@ -3685,6 +5853,7 @@ class BasicCommands {
       return s.substr(0,pars[1].value);
   }
 
+  _fun_info_right_DLR_() { return "string:Right part of the string"; }
   _fun_right_DLR_( pars ) {
       //? RIGHT$(A$,8)
       var s = pars[0].value;
@@ -3695,6 +5864,7 @@ class BasicCommands {
       return s.substr( s.length - pars[1].value );
   }
 
+  _fun_info_mid_DLR_() { return "string:A substring"; }
   _fun_mid_DLR_( pars ) {
       //? RIGHT$(A$,8)
       var s = pars[0].value;
@@ -3710,26 +5880,47 @@ class BasicCommands {
       }
   }
 
-  _fun_fre( pars ) {
-    return -26627;
-  }
-
+  _fun_info_sin() { return "math:Sinus"; }
   _fun_sin( pars ) {
     return Math.sin( pars[0].value);
   }
 
+  _fun_info_tri() { return "math+:Triangle"; }
+  _fun_tri( pars ) {
+    var v = Math.abs( pars[0].value) % 1;
+
+    if( v<=0.5 ) {
+        return v*2;
+    }
+    else if( v<=1 ) {
+        return 1-((v-0.5) * 2);
+    }
+  }
+
+  _fun_info_saw() { return "math+:Saw Tooth"; }
+  _fun_saw( pars ) {
+    var v = Math.abs( pars[0].value) % 1;
+
+    return v;
+
+  }
+
+  _fun_info_tan() { return "math:Tangent"; }
   _fun_tan( pars ) {
     return Math.tan( pars[0].value);
   }
 
+  _fun_info_atn() { return "math:ATan function"; }
   _fun_atn( pars ) {
     return Math.atan( pars[0].value);
   }
 
+  _fun_info_cos() { return "math:Cosinus"; }
   _fun_cos( pars ) {
     return Math.cos( pars[0].value);
   }
 
+  _fun_info_spc() { return "string:Spaces for padding:<Size Of Padding>"; }
   _fun_spc( pars ) {
     var out="";
     for( var i=0; i<pars[0].value; i++) {
@@ -3743,14 +5934,30 @@ class BasicCommands {
     return m;
   }
 
-  _fun_usr() {
-    return 0;
-  }
 
+
+  _fun_info_int() { return "math:Convert to Integer"; }
   _fun_int( pars ) {
     return Math.floor( pars[0].value );
   }
 
+  _fun_info_range() { return "math+:Keep in range:<V>,<MIN>,<MAX>"; }
+  _fun_range( pars ) {
+
+    if( pars.length <3) {
+      this.erh.throwError( "parameter", "expected 3 parameters" );
+    }
+    var v = pars[0].value ;
+    var min = pars[1].value ;
+    var max = pars[2].value ;
+
+    if( v<min ) { return min; }
+    if( v>max ) { return max; }
+    return v;
+  }
+
+
+  _fun_info_tab() { return "print:Tab cursor Xpos to the right:<Number of Tabs>"; }
   _fun_tab( pars ) {
     var runtime = this.runtime;
 
@@ -3769,6 +5976,7 @@ class BasicCommands {
     return "";
   }
 
+  _fun_info_sgn() { return "math:Sign of number"; }
   _fun_sgn( pars ) {
     var x = pars[0].value;
 
@@ -3777,7 +5985,12 @@ class BasicCommands {
     return 0;
   }
 
+  _fun_info_millis() { return "time:Current time in milliseconds"; }
+  _fun_millis( pars ) {
+    return this.runtime.getMillis( );
+  }
 
+  _fun_info_jiffies() { return "time:Current time in 'jiffies'"; }
   _fun_jiffies( pars ) {
     return this.runtime.getJiffyTime( );
   }
@@ -3801,7 +6014,7 @@ class Parser {
 
   init() {
 
-	  this.CTRL_KW = ["IF","THEN","GOTO","AND", "NOT", "OR",  "GOSUB", "RETURN", "FOR", "TO", "NEXT", "STEP", "DATA", "REM", "GOSUB", "DIM", "END", "LET", "STOP", "DEF", "FN", "ON" ];
+	  this.CTRL_KW = ["IF","THEN","GOTO","AND", "NOT", "OR",  "GOSUB", "RETURN", "FOR", "TO", "NEXT", "STEP", "DATA", "REM", "GOSUB", "DIM", "END", "LET", "STOP", "DEF", "FN", "ON", "SUB", "INTERRUPT0", "INTERRUPT1" ];
     this.SHORTCUT_KW = ["?"];
 
     this.KEYWORDS = this.commands.getStatements();
@@ -4636,7 +6849,7 @@ class Parser {
 
   }
 
-  parseControlStructure(  context, preTokens, commands, command, nameToken, token0  ) {
+  parseControlStructure(  context, preTokens, commands, command, handlers, nameToken, token0  ) {
 
     var token = token0;
 		var tokens = context.tokens;
@@ -4791,20 +7004,28 @@ class Parser {
         token = tokens.shift();
 
         if( token === undefined ) {
-          this.throwError( context, "GOTO/GOSUB expects number", "undef'd statement");
+          this.throwError( context, "GOTO/GOSUB expects linenumber or label", "undef'd statement");
         }
 
         if( token.type != "num") {
           //this.throwError( context, "GOTO/GOSUB expects number", "undef'd statement");
 
-          tokens.unshift( token );
+          if( token.type != "name") {
+              this.throwError( context, "GOTO/GOSUB expects linenumber or label", "undef'd statement");
+          }
 
-          var endTokens = [];
-          endTokens.push( { type: "cmdsep", data: "@@@all" });
+          var label = token.data;
 
-          var expression = this.parseBoolExpression( context, endTokens );
+          token = tokens.shift();
+          if( token !== undefined ) {
+            if( token.type != "cmdsep") {
+              this.throwError( context, "Expected \"command separator\", instead of '"+token.data+"'");
+            }
+          }
+
           command.params=[];
-          command.params[0] = expression;
+          command.params[0] = label;
+          command.label = true;
           commands.push( command );
           return;
 
@@ -4819,60 +7040,116 @@ class Parser {
 
         command.params=[];
         command.params[0] = num;
+        command.label = false;
         commands.push( command );
 
       }
       else if( controlToken == "ON" ) {
         var nums = [];
+        var onInterrupt = false;
 
         endTokens = [];
         endTokens.push( { type: "name", data: "GOTO" });
         endTokens.push( { type: "name", data: "GOSUB" });
 
-        var onExpr = this.parseBoolExpression( context, endTokens );
+        token = tokens.shift();
+        var onExpr = null;
+
+        if( token.type == "name" && (token.data == "INTERRUPT0" || token.data == "INTERRUPT1")) {
+          onInterrupt = true;
+          onExpr = {
+            type: "control",
+            data: token.data
+          }
+        }
+        else {
+          tokens.unshift( token );
+          onExpr = this.parseBoolExpression( context, endTokens );
+        }
 
         token = tokens.shift();
         if( token.type != "name") {
           this.throwError( context, "ON expects GOTO/GOSUB");
         }
-        if( !( token.data == "GOTO" || token.data == "GOSUB" )) {
-          this.throwError( context, "ON expects GOTO/GOSUB");
+
+        if( !onInterrupt ) {
+          if( !( token.data == "GOTO" || token.data == "GOSUB" )) {
+            this.throwError( context, "ON expects GOTO/GOSUB");
+          }
         }
+        else {
+          if( !( token.data == "GOTO" )) {
+            this.throwError( context, "ON INTERRUPT expects GOTO");
+          }
+        }
+
         var onType = token.data;
 
         token = tokens.shift();
 
-        if( token.type != "num") {
-          this.throwError( context, "ON GOTO/GOSUB expects number", "undef'd statement");
-        }
+        var labelFlag = false;
+        var label = "";
+        var num0;
 
         if( token.type != "num") {
-          this.throwError( context, "ON GOTO/GOSUB expects number",  "undef'd statement");
+
+            if( token.type != "name") {
+                this.throwError( context, "GOTO/GOSUB expects linenumber or label", "undef'd statement");
+            }
+
+            labelFlag = true;
+            label = token.data;
+
         }
-        nums.push(  parseInt(token.data) );
-
-        while ( true ) {
-
-          token = tokens.shift();
-          if( token == undefined ) { break; }
-          if( token.type == "cmdsep") { break; }
-          if( token.type == "cmdsep") { break; }
-          if( !( token.type == "sep" && token.data == "," )) {
-            this.throwError( context, "ON GOTO/GOSUB expects numberlist");
-          }
-
-          token = tokens.shift();
-          if( token.type != "num") {
-            this.throwError( context, "GOTO/GOSUB expects number");
-          }
-          nums.push(  parseInt(token.data) );
+        else {
+          num0  = parseInt(token.data);
         }
 
-        command.params=[];
-        command.params[0] = onType.toLowerCase();
-        command.params[1] = onExpr;
-        command.params[2] = nums;
-        commands.push( command );
+        nums.push( num0 );
+
+        if( !onInterrupt ) {
+          while ( true ) {
+
+            token = tokens.shift();
+            if( token == undefined ) { break; }
+            if( token.type == "cmdsep") { break; }
+            if( token.type == "cmdsep") { break; }
+            if( !( token.type == "sep" && token.data == "," )) {
+              this.throwError( context, "ON GOTO/GOSUB expects numberlist");
+            }
+
+            token = tokens.shift();
+            if( token.type != "num") {
+              this.throwError( context, "GOTO/GOSUB expects number");
+            }
+            nums.push(  parseInt(token.data) );
+          }
+
+          if( nums.length > 1 ) {
+            this.throwError( context, "ON INTERUPT GOTO expects only a single line number");
+          }
+
+          command.params=[];
+          command.params[0] = onType.toLowerCase();
+          command.params[1] = onExpr;
+          command.params[2] = nums;
+          commands.push( command );
+        }
+        else {
+
+          command.params=[];
+          command.params[0] = onExpr.data.toLowerCase();
+          if ( labelFlag ) {
+              command.params[1] = label;
+          }
+          else {
+              command.params[1] = num0;
+          }
+          command.label = labelFlag;
+
+          commands.push( command );
+
+        }
 
       }
       else if( controlToken == "RETURN") {
@@ -5034,7 +7311,9 @@ class Parser {
           }
         }
 
-        var block = this.parseLineCommands( context );
+        //var block = this.parseLineCommands( context );
+        var result = this.parseLineCommands( context );
+        var block = result.commands;
 
         if( this.debugFlag ) {
           console.log( block );
@@ -5087,7 +7366,26 @@ class Parser {
         commands.push( command );
 
       }
-      else if( controlToken == "REM") {
+      else if( controlToken == "SUB") {
+
+        var label = "";
+        token = tokens.shift();
+        if( token == null ) { throw "SUB expected label"; }
+
+        if( token.type != "name" ) {
+          throw "SUB expected label not '" +token.data+ "'";
+        }
+
+        label = token.data.toUpperCase();
+
+        token = tokens.shift();
+        if( token != null ) { throw "SUB unexpected data after label"; }
+
+        command.label = label;
+        commands.push( command );
+
+      }
+      else if( controlToken == "REM" ) {
 
         while( true ) {
 
@@ -5169,6 +7467,7 @@ class Parser {
 
 		var tokens = context.tokens;
 		var commands = [];
+    var handlers = {};
 
 		var i=1;
 		while( true ) {
@@ -5221,7 +7520,7 @@ class Parser {
 
       if (  control ) {
 
-        this.parseControlStructure( context, preTokens, commands, command, nameToken, token );
+        this.parseControlStructure( context, preTokens, commands, command, handlers, nameToken, token );
 
       }
 			else if( token.type == "eq") {
@@ -5236,14 +7535,20 @@ class Parser {
       else {
           if( !keyword ) {
             console.log("Dump: ",context, preTokens, commands, command, nameToken, token);
-            this.throwError( context, "no such statement: " + nameToken );
+            this.throwError( context, "no such command: " + nameToken );
           }
           this.parseStatementCall( context, preTokens, commands, command, nameToken, token );
 
       }
 
 		}
-    return commands;
+
+    var result = {
+        commands: commands,
+        handlers: handlers
+      };
+
+    return result;
 	}
 
   logTokens( tokens ) {
@@ -5265,6 +7570,57 @@ class Parser {
     for( var i=0; i<tokens.length; i++) {
         var tok = tokens[i];
         console.log("token: ",tok);
+    }
+
+  }
+
+
+
+
+  parseErrorLine( line ) {
+
+    var lineRecord = {
+      lineNumber: -1,
+      commands: []
+    };
+
+    var errContext, detail, lineNr=-1;
+
+    errContext="tokenizer";
+    detail="init";
+		var toker = new Tokenizer( new StringReader ( line ), this.KEYWORDS );
+
+    detail="parsing tokens";
+    var tokens = toker.tokenize();
+    if( this.debugFlag ) {
+      console.log("Tokens after tokenizer");
+    }
+    this.logTokens( tokens );
+
+    detail="internal";
+    tokens = this.upperCaseNameTokens( tokens );
+    tokens = this.removePadding( tokens );
+    tokens = this.mergeCompTokens( tokens );
+    tokens = this.mergeBrokenUpTokens( tokens );
+
+
+    if( this.debugFlag ) {
+      console.log("Tokens after merge");
+    }
+    this.logTokens( tokens );
+
+    if( tokens.length == 0 ) {
+			return null;
+		}
+
+		if( tokens[0].type == "num" ) {
+			lineRecord.lineNumber = tokens[0].data;
+      lineNr = tokens[0].data;
+      var lineRest = line.substr( lineNr.length );
+      return this.parseLine( lineNr + " REM[ERROR] " + lineRest  );
+    }
+    else {
+      throw "Expected line number, when reparsing line with error";
     }
 
   }
@@ -5318,9 +7674,11 @@ class Parser {
 
       errContext = "parser";
       detail="parsing commands";
-      var commands = this.parseLineCommands( context );
+      var result = this.parseLineCommands( context );
+      var commands = result.commands;
       lineRecord.commands = commands;
       lineRecord.raw = line;
+      lineRecord.handlers = result.handlers;
       return lineRecord;
     }
     catch ( e ) {
@@ -5416,7 +7774,7 @@ class Tokenizer {
 
 	isOpChar( ctx ) {
 
-		var rv = ctx.c.match("[+]|[-]|[*]|[/]|[\\^]|[;]") != null;
+		var rv = ctx.c.match("[+]|[-]|[*]|[/]|[\\%]|[\\^]|[;]") != null;
 
 		return [rv,0];
 
@@ -5444,7 +7802,19 @@ class Tokenizer {
 		}
 		var rv = ctx.c.match("[a-zA-Z0-9$%?]") != null;
 
-		if( ctx.c=="$" || ctx.c== "%") {
+		if( ctx.c== "%" ) {
+				rv = false;
+				if( ctx.prev != null ) {
+					var varNameChar = ctx.prev.match("[a-zA-Z0-9]") != null;
+					if( varNameChar ) {
+						ctx.endFound = true;
+						rv = true;
+					}
+				}
+		}
+
+
+		if( ctx.c=="$" ) {
 			ctx.endFound = true;
 		}
 
@@ -5662,25 +8032,30 @@ class Input {
 
     this.interactive = flag;
     this.sys.blinkMode( flag  );
-    
+
+  }
+
+  flush() {
+    this.keyPress = [];
   }
 
   inputKeyHandler( e )  {
 
     var hc = this.handlerClazz;
-    if( !this.interactive ) {
 
-      if( e.keyLabel == "Escape" ) {
-          hc["stop"]();
-      }
-      else {
+    if( e.keyLabel == "Escape" ) {
+        hc["stop"]();
+        return;
+    }
+
+    hc["keyInterrupt"]( "keypress", e );
+
+    if( !this.interactive ) {
         this.keyPress.push( e );
-      }
     }
     else {
-
         hc["interactiveKeyHandler"]( e );
-    }
+      }
   }
 
   getKey() {
@@ -5716,28 +8091,68 @@ class processes {
 
 		this.sys = sys;
 		this.processes = [];
+		this.fastProcesses = [];
+		this.fastProcessesIds = {};
 		this.count = 0;
 
 		var _this = this;
     var processes = _this.processes;
 
 		this.sys.log("Starting process interval");
+
+		//slow loop
 		setInterval(function()  {
 
 			for( var i=0; i<processes.length; i++ ) {
 				if( processes[i] ) {
-					processes[ i ].cycle();
-					//_this.count++;
+
+					var upd;
+
+					upd = processes[ i ].cycle();
+					if( upd ) {
+						var stat = processes[ i ].getStatus();
+						_this.sys.poststatus( i, stat );
+					}
+
+					var cpuHungry =  processes[ i ].cpuNeeded();
+					var found = !(_this.fastProcessesIds[ i + "_"] === undefined);
+
+					if( cpuHungry && !found) {
+						_this.fastProcessesIds[ i + "_"] = _this.fastProcesses.length;
+						_this.fastProcesses.push( processes[ i ] );
+					}
+					else if( !cpuHungry && found) {
+						var fpID = _this.fastProcessesIds[ i + "_"];
+						var nfpArr = [];
+						for( var j=0; j<_this.fastProcesses.length; j++ ) {
+							var el = _this.fastProcesses[ j ];
+							if( j!= fpID ) {
+								nfpArr.push( el );
+							}
+						}
+						_this.fastProcesses = nfpArr;
+						_this.fastProcessesIds[ i + "_"] = undefined;
+					}
 				}
 			}
 		}, 100);
+
+		//fast loop
+		setInterval(function()  {
+
+			for( var i=0; i<_this.fastProcesses.length; i++ ) {
+					var dummy = _this.fastProcesses[ i ].cycle();
+			}
+		}, 10);
 	}
+
+
 
 	getTicks() {
 		return this.count;
 	}
 
-	register( obj ) {
+	old_register( obj ) {
 
 		var newId = this.processes.length-1;
 
@@ -5770,6 +8185,97 @@ class processes {
 
 //--EOC 
 
+// ## commandhelp.js ==========---------- 
+// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+//  src/sys/modules/basic/worker/commandhelp.js
+//  BY packworkers.js -- src/sys/modules/basic/worker/commandhelp.js
+
+class CommandHelp {
+
+	constructor() {}
+
+
+  getCategoriesNormalize(  categoryIndexesInt ) {
+    var categoryIndexes = [
+      Object.getOwnPropertyNames( categoryIndexesInt[0] ),
+      categoryIndexesInt[1]
+    ];
+    return categoryIndexes;
+  }
+
+  getCategoriesIntermediate(  categoryIndexes, clazz ) {
+
+
+    var stats = clazz.getStatements( true );
+    var funs = clazz.getFunctions( true );
+
+    var cat = categoryIndexes[ 0 ];
+    var catLists = categoryIndexes[ 1 ];
+
+    if( cat[ "general" ] === undefined ) { cat[ "general" ] = 0; catLists[ "general" ] = []; }
+
+    for( var i=0;i<stats.length;i++) {
+      var rname = stats[i];
+      var si = rname.replace("_stat_","_stat_info_");
+
+      var catlabel;
+      if( !( clazz[ si ] === undefined ) ) { catlabel = clazz[ si ](); }
+      else { catlabel = "general"; }
+
+      var f_attribs = {};
+      if( catlabel.indexOf(":") >0 ) {
+
+        var partsLen = catlabel.split(":" ).length;
+
+        f_attribs.description =  catlabel.split(":" )[1];
+        f_attribs.input =   catlabel.split(":" )[2];
+        f_attribs.output =  catlabel.split(":" )[3];
+
+        catlabel=catlabel.split(":")[0];
+      }
+
+      rname = rname.replace("_stat_","").toUpperCase();
+
+      if( cat[ catlabel ] === undefined ) { cat[ catlabel ] = 0; catLists[ catlabel ] = []; }
+      cat[ catlabel ]++;
+      catLists[ catlabel ].push( {name: rname, attribs: f_attribs } );
+    }
+
+    for( var i=0;i<funs.length;i++) {
+      var rname = funs[i];
+      var si = rname.replace("_fun_","_fun_info_");
+
+      var catlabel;
+      if( !( clazz[ si ] === undefined ) ) { catlabel = clazz[ si ](); }
+      else { catlabel = "general"; }
+      var f_attribs = {};
+
+      if( catlabel.indexOf(":") >0 ) {
+
+          var partsLen = catlabel.split(":" ).length;
+
+          f_attribs.description =  catlabel.split(":" )[1];
+          f_attribs.input =   catlabel.split(":" )[2];
+          f_attribs.output =  catlabel.split(":" )[3];
+
+          catlabel=catlabel.split(":")[0];
+      }
+
+      rname = rname.replace("_fun_","").replace("_DLR_","$").toUpperCase() + "()";
+
+      if( cat[ catlabel ] === undefined ) { cat[ catlabel ] = 0; catLists[ catlabel ] = []; }
+      cat[ catlabel ]++;
+      catLists[ catlabel ].push( {name: rname, attribs: f_attribs } );
+    }
+
+    //var cats = Object.getOwnPropertyNames( cat );
+
+    return [cat,catLists];
+  }
+}
+
+//--EOC 
+
 // ## ../../rwbuffers/worker/textarea.js ==========---------- 
 // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
 //  src/sys/modules/basic/worker/../../rwbuffers/worker/textarea.js
@@ -5792,13 +8298,24 @@ class TextArea {
 		this.colors ={};
 		this.reverse = false;
 
-		this.colors.txtBgColor= 0;
-		this.colors.txtColor = 5;
+		this.defaultFG = 5;
+		this.defaultBG = 0;
+
+		this.colors.txtBgColor= this.defaultBG;
+		this.colors.txtColor = this.defaultFG;
 
 		this.initialized = false;
 
 		this.changes = { all: false, list: [] };
+		this.pokeFlush = true;
+
+
+		//this.textArea( this.cols , this.rows , -1, -1 );
 	}
+
+	isActive() {
+    return this.initialized && !this.hidden;
+  }
 
 	reInit( w, h ) {
 		this._int_initMode( w, h );
@@ -5814,6 +8331,7 @@ class TextArea {
 		}
 
 
+  /* Adding changes, to be posted to MT throught flush */
 	_int_addChangeAll() {
 
 		 this.changes.all = true;
@@ -5821,6 +8339,14 @@ class TextArea {
 
 	 }
 
+
+
+	 changeCount() {
+		 if( this.changes.all ) { return 65535; }
+		 return this.changes.list.length;
+	 }
+
+	/* Adding single change, to be posted to MT throught flush */
 	_int_addChange( area ) {
 
 			if(  this.changes.all ) {
@@ -5853,6 +8379,7 @@ class TextArea {
 
 	 }
 
+	 /* Force flush to MT the whole buffer */
 	_int_flushAll() {
 			this.changes.all = true;
 			this.changes.list = [];
@@ -5861,7 +8388,8 @@ class TextArea {
 
 		}
 
-		_int_getArea( x1, y1, x2, y2 ) {
+  /* Utility function to prepare input for addChange (which itself prepares for flush )*/
+	_int_getArea( x1, y1, x2, y2 ) {
 			var cells = [];
 
 			for( var y=y1; y<=y2; y++) {
@@ -5885,6 +8413,7 @@ class TextArea {
 
 		}
 
+   /* Flush local changes to Main Thread for actual display updates*/
 	 _int_flush() {
 
 			if( this.changes.all ) {
@@ -5894,7 +8423,8 @@ class TextArea {
 							bg: this.colors.txtBgColor,
 							cx: this.x,
 							cy: this.y,
-							cells: this.cellel
+							cells: this.cellel,
+							cursorMode: this.cursorMode
 						} );
 
 				this.changes.all = false;
@@ -5909,7 +8439,8 @@ class TextArea {
 						bg: this.colors.txtBgColor,
 						cx: this.x,
 						cy: this.y,
-						areasList:  this.changes.list
+						areasList:  this.changes.list,
+						cursorMode: this.cursorMode
 					}  );
 				this.changes.list = [];
 			}
@@ -5920,17 +8451,117 @@ class TextArea {
 						bg: this.colors.txtBgColor,
 						cx: this.x,
 						cy: this.y,
-						areasList:  []
+						areasList:  [],
+						cursorMode: this.cursorMode
 					}  );
 
 			}
 
 		}
 
-
-
 		attach( w, h ) {
 			this._int_initMode( w, h);
+		}
+
+		setPokeFlush( flag ) {
+		  this.pokeFlush = flag;
+		}
+
+
+		peekc( x, y ) {
+
+			var cell = this.cellel[y][x];
+     	return cell.txt.codePointAt(0);
+
+		}
+
+		peekcl( x, y, m ) {
+
+			var cell = this.cellel[y][x];
+
+			if( m== 0 ) {
+				return cell.fg;
+			}
+			else if( m== 1 ) {
+				return cell.bg;
+			}
+			else  {
+				return cell.fg + (16*cell.bg);
+			}
+		}
+
+		pokec( x, y , c ) {
+
+			try {
+				var cell = this.cellel[y][x];
+				cell.txt = String.fromCodePoint( c );
+
+				var area = this._int_getArea( x, y, x, y );
+				this._int_addChange( area );
+
+				if( this.pokeFlush ) {
+					this._int_flush();
+				}
+			}
+			catch( e ) {
+				throw "Cannot pokec to adress (" + x + "," + y + ")";
+			}
+
+		}
+
+		pokecl( x, y , fg, bg ) {
+
+			try {
+				var cell = this.cellel[y][x];
+				if( !(fg === undefined )) {
+					cell.fg = fg;
+				}
+				if( !(bg === undefined )) {
+					cell.bg = bg;
+				}
+				var area = this._int_getArea( x, y, x, y );
+				this._int_addChange( area );
+
+				if( this.pokeFlush ) {
+					this._int_flush();
+				}
+
+			}
+			catch( e ) {
+				throw "Cannot pokec to adress (" + x + "," + y + ")";
+			}
+		}
+
+
+		pokeccl( x, y , c, fg, bg ) {
+
+			try {
+				var cell = this.cellel[y][x];
+
+				cell.txt = String.fromCodePoint( c );
+				if( !(fg === undefined )) {
+					cell.fg = fg;
+				}
+				if( !(bg === undefined )) {
+					cell.bg = bg;
+				}
+
+				var area = this._int_getArea( x, y, x, y );
+				this._int_addChange( area );
+
+				if( this.pokeFlush ) {
+					this._int_flush();
+				}
+
+			}
+			catch( e ) {
+				throw "Cannot pokec to adress (" + x + "," + y + ")";
+			}
+		}
+
+		triggerFlush() {
+
+			this._int_flush();
 		}
 
 		_int_initMode( w, h ) {
@@ -5947,8 +8578,10 @@ class TextArea {
 			this.rows = h;
 			this.cols = w;
 
-			this.colors.txtBgColor= 0;
-			this.colors.txtColor = 5;
+			this.textArea( this.cols, this.rows, -1, -1 );
+
+			this.colors.txtBgColor= this.defaultBG;
+			this.colors.txtColor = this.defaultFG;
 
 			this.cellel = [];
 			for( var y=0; y<this.rows; y++) {
@@ -5970,9 +8603,12 @@ class TextArea {
 
 			this._int_flushAll();
 
-			this.sys.log("TBCON w Ready.");
+			this.sys.log("TEXTAREA w Ready.");
 
 			this.initialized = true;
+			this.pokeFlush = true;
+			/* if true then all pokes in "character memory" will be flushed immediately to the */
+			/*main browswer process */
 	}
 
 
@@ -5983,57 +8619,229 @@ class TextArea {
 	getCurrentLine() {
 		var y = this.y;
 		var str = "";
-		for( var i = 0; i< this.cols; i++) {
-			str += this.cellel[ y ][ i ].txt;
+		for( var i = 0; i< this.acols; i++) {
+			var xi = i + this.ax0;
+			str += this.cellel[ y ][ xi ].txt;
 		}
 		return str;
 	}
 
+	getLineFrom( x0, y ) {
 
+		var str = "";
+		var x2 = this.acols + this.ax0 - 1;
+
+		for( var i = x0; i< x2; i++) {
+			str += this.cellel[ this.ay0 + y ][ i ].txt;
+		}
+		return str;
+	}
+
+	/* Commands and functions to modify the text area buffer */
+
+
+	setDefault( fg, bg ) {
+		this.defaultBG = bg;
+		this.defaultFG = fg;
+
+	}
+
+
+	colorReset() {
+
+		this.colors.txtBgColor= this.defaultBG;
+		this.colors.txtColor = this.defaultFG;
+
+		//this.cellel = [];
+		var fg = this.defaultFG;
+		var bg = this.defaultBG;
+
+		for( var ay=0; ay<this.rows; ay++) {
+			//var rowArray = [];
+
+			var y = ay;
+			for( var ax=0; ax<this.cols; ax++) {
+
+				var x = ax;
+
+				var cell = this.cellel[ y ][ x];
+
+				cell.fg = fg;
+				cell.bg = bg;
+			}
+			//this.cellel.push( rowArray );
+		}
+
+		this.changes = { all: true, list: [] };
+
+		this._int_flushAll();
+	}
+
+	reset() {
+		this.textArea( this.cols, this.rows, -1, -1 );
+
+		this.colors.txtBgColor= this.defaultBG;
+		this.colors.txtColor = this.defaultFG;
+
+		this.pokeFlush = true;
+		this.clear();
+
+	}
+
+	textArea( w, h, xo, yo ) {
+		var divx = this.cols - w;
+		var divy = this.rows - h;
+
+		if( xo < 0 ) {
+				this.ax0 = Math.floor(divx / 2);
+		}
+		else {
+			this.ax0 = xo;
+		}
+
+		if( yo < 0 ) {
+				this.ay0 = Math.floor(divy / 2);
+		}
+		else {
+			this.ay0 = yo;
+		}
+
+		this.acols = w;
+		this.arows = h;
+		this.x = this.ax0;
+		this.y = this.ay0;
+	}
 
 	clear() {
 
-		this.cellel = [];
-		for( var y=0; y<this.rows; y++) {
-			var rowArray = [];
-			for( var x=0; x<this.cols; x++) {
+		//this.cellel = [];
+		for( var ay=0; ay<this.arows; ay++) {
+			//var rowArray = [];
+
+			var y = this.ay0 + ay;
+			for( var ax=0; ax<this.acols; ax++) {
+
+				var x = this.ax0 + ax;
+
 				var cell = {
 					txt: " ",
 					fg: this.colors.txtColor,
 					bg: this.colors.txtBgColor
 				}
-				rowArray.push( cell );
+				this.cellel[ y ][ x] = cell;
 			}
-			this.cellel.push( rowArray );
+			//this.cellel.push( rowArray );
 		}
 
 		this.changes = { all: true, list: [] };
 
-		this.x = 0;
-		this.y = 0;
+		this.x = this.ax0;
+		this.y = this.ay0;
 
 		this._int_flushAll();
 	}
 
 
+	jumpTo( destination ) {
+		if( destination == "home" ) {
+			this.y = this.ay0;
+			this.x = this.ax0;
+		}
+		if( destination == "end" ) {
+			this.y = this.ay0 + this.arows - 1;
+			this.x = this.ax0 + this.acols - 1;
+		}
+		else if( destination == "line-start" ) {
+			this.x = this.ax0;
+		}
+		else if( destination == "line-end" ) {
+			this.x = this.ax0 + this.acols - 1;
+		}
+		else if( destination == "text-end" ) {
+
+			/* where is the last char -> maxX */
+			var c = "DC";
+			var oldx = this.x;
+			this.x = ((this.ax0 + this.acols)-1);
+			var max = ((this.ax0 + this.acols)-1);
+
+			while( this.x >= this.ax0 ) {
+						c = this.cellel[ this.y ][ this.x ].txt;
+						if( c != " " ) {
+							this.x++;
+							if( this.x > max) {
+								this.x = max;
+							}
+							break;
+						}
+						this.x--;
+			}
+
+			var maxX = this.x;
+			/*-reset, and jump to end of next text area-*/
+			this.x = oldx;
+			var c = "DC";
+			while( this.x< ((this.ax0 + this.acols)-1) && c != " ") {
+						this.x++;
+						c = this.cellel[ this.y ][ this.x ].txt;
+			}
+
+
+			/*make sure we did not jump past last char*/
+			if( this.x > maxX ) {
+				this.x = maxX;
+			}
+		}
+		else if( destination == "text-end-all" ) {
+			var c = "DC";
+			this.x = ((this.ax0 + this.acols)-1);
+			var max = ((this.ax0 + this.acols)-1);
+
+			while( this.x >= this.ax0 ) {
+						c = this.cellel[ this.y ][ this.x ].txt;
+						if( c != " " ) {
+							this.x++;
+							if( this.x > max) {
+								this.x = max;
+							}
+							break;
+						}
+						this.x--;
+			}
+		}
+		else if( destination == "text-start" ) {
+			var c = "DC";
+			while( this.x> this.ax0 && c != " ") {
+						this.x--;
+						c = this.cellel[ this.y ][ this.x ].txt;
+			}
+		}
+
+		this._int_flush();
+	}
+
 	cursorMove( dir ) {
 		if( dir == "up" ) {
-			if( this.y>0) {
+			if( this.y>this.ay0) {
 				this.y--;
 			}
 		}
 		else if( dir == "down" ) {
-			if( this.y< (this.rows-1)) {
+			if( this.y< ((this.ay0 + this.arows)-1)) {
 				this.y++;
+			}
+			else if( this.y== ((this.ay0 + this.arows)-1)) {
+				this.__int_scrollDown();
+				this._int_addChangeAll();
 			}
 		}
 		if( dir == "left" ) {
-			if( this.x>0) {
+			if( this.x>this.ax0) {
 				this.x--;
 			}
 		}
 		else if( dir == "right" ) {
-			if( this.x< (this.cols-1)) {
+			if( this.x< ((this.ax0 + this.acols)-1)) {
 				this.x++;
 			}
 		}
@@ -6041,28 +8849,36 @@ class TextArea {
 	}
 
 	backspace() {
-		if( this.x == 0) {
-			return;
+		if( this.x != this.ax0 ) {
+				this.x--;
 		}
 
-		this.x--;
-		var cell = this.cellel[ this.y ][ this.x ];
-		cell.txt = " ";
+		this.__int_scrollLineLeftFrom( this.x, this.y );
 
-		var area = this._int_getArea( this.x, this.y, this.x, this.y, );
+		var area = this._int_getArea( this.x, this.y, this.cols-1, this.y, );
+		this._int_addChange( area );
+		this._int_flush();
+	}
+
+	delete() {
+
+		this.__int_scrollLineLeftFrom( this.x, this.y );
+
+		var area = this._int_getArea( this.x, this.y, this.cols-1, this.y, );
 		this._int_addChange( area );
 		this._int_flush();
 	}
 
 	nl() {
 
-			this.x = 0;
+			this.x = this.ax0;
 			this.y ++;
+			var ya = this.y - this.ay0;
 
-			if( this.y >= this.rows ) {
+			if( ya >= this.arows ) {
 
 				this.__int_scrollDown();
-				this.y = this.rows -1;
+				this.y = this.ay0 + (this.arows -1);
 
 				this._int_flushAll();
 				return;
@@ -6073,11 +8889,12 @@ class TextArea {
 	}
 
 	__int_nl() {
-			this.x = 0;
+			this.x = this.ax0;
 			this.y ++;
-			if( this.y >= this.rows ) {
+			var ya = this.y - this.ay0;
+			if( ya >= this.arows ) {
 				this.__int_scrollDown();
-				this.y = this.rows -1;
+				this.y = this.ay0 + (this.arows -1);
 				return { scroll: true }
 			}
 			return { scroll: false }
@@ -6097,9 +8914,9 @@ class TextArea {
 			this._int_flush();
 	}
 
-	_int_write( str ) {
+	_int_write( str, insert ) {
 		for (const c of str) {
-			this.__int_write_direct_ch( c );
+			this.__int_write_direct_ch( c, insert );
 		}
 	}
 
@@ -6110,8 +8927,54 @@ class TextArea {
 	}
 
 
+	insert( str ) {
+			this._int_write( str, true );
 
-	__int_write_direct_ch( ch ) {
+			this._int_flush();
+	}
+
+
+	__int_scrollLineRightFrom( x0, y  ) {
+
+		var x = x0;
+		var x1 = this.ax0 + this.acols - 1;
+
+		if( x0 == x1 ) {
+			return;
+		}
+
+		for( var i=x1; i>x0; i--) {
+			var cell1 = this.cellel[ y  ][ i-1 ];
+			var cell2 = this.cellel[ y  ][ i ];
+
+			cell2.fg = cell1.fg;
+			cell2.bg = cell1.bg;
+			cell2.txt = cell1.txt;
+		}
+	}
+
+	__int_scrollLineLeftFrom( x0, y  ) {
+
+		var x = x0;
+		var x1 = this.ax0 + this.acols - 1;
+
+		if( x0 == x1 ) {
+			return;
+		}
+
+		for( var i=x0; i<x1; i++) {
+			var cell1 = this.cellel[ y  ][ i +1 ];
+			var cell2 = this.cellel[ y  ][ i ];
+
+			cell2.fg = cell1.fg;
+			cell2.bg = cell1.bg;
+			cell2.txt = cell1.txt;
+		}
+
+
+	}
+
+	__int_write_direct_ch( ch, insert ) {
 
 		var code = ch.codePointAt(0);
 
@@ -6144,6 +9007,16 @@ class TextArea {
 			return;
 		}
 
+		var area;
+
+		if( insert ) {
+			this.__int_scrollLineRightFrom( this.x, this.y );
+
+			area = this._int_getArea( this.x, this.y, this.ax0 + this.acols-1, this.y );
+			this._int_addChange( area );
+
+		}
+
 		cell.txt = ch;
 
 		if( !this.reverse  ) {
@@ -6159,17 +9032,19 @@ class TextArea {
 		var oldy = this.y;
 
 		this.x++;
-		if( this.x >= this.cols ) {
-			this.x = 0;
+		var ax = this.x - this.ax0;
+		if( ax > (this.acols-1) ) {
+			this.x = this.ax0;
 			var stat = this.__int_nl();
 			if( stat.scroll ) {
 				this._int_addChangeAll();
+				return;
 			}
-			return;
 		}
 
-		var area = this._int_getArea( oldx, oldy, oldx, oldy );
+		area = this._int_getArea( oldx, oldy, oldx, oldy );
 		this._int_addChange( area );
+		//this._int_addChangeAll();
 
 	}
 
@@ -6188,28 +9063,6 @@ class TextArea {
 	}
 
 
-	_int_setPos( x, y ) {
-
-		if(x >= 0) {
-				this.x = x;
-		}
-		if(y >= 0) {
-				this.y = y;
-		}
-
-		if( this.x >= this.cols ) { this.x = this.cols-1;}
-		if( this.y >= this.rows ) { this.y = this.rows-1;}
-	}
-
-
-	setPos( x, y ) {
-
-		this._int_setPos( x,y );
-
-		this._int_flush();
-	}
-
-
 	_int_control( chr, data ) {
 
 		if( chr == 16 ) {
@@ -6219,10 +9072,13 @@ class TextArea {
 			this.colors.txtBgColor = data;
 		}
 		else if( chr == 18 ) {
-			document.body.style.backgroundColor = this.palette[ data ];  //TODO
+			this.sys.post( "border", { d: data }  );
 		}
 		else if( chr == 24 ) {  //CANCEL -> (we map it to) Clear Screen
 			this.clear();
+		}
+		else if( chr == 12 ) {  //FORMFEED -> (we map it to) RESET SCREEN
+			this.reset();
 		}
 		else if( chr == 25 ) {  //End of Medium -> (we map it to) Hide
 			//this.hide();   TODO
@@ -6238,18 +9094,32 @@ class TextArea {
 		}
 	}
 
-	setCursorPos( x, y ) {
-		if( x<0 || y<0 ) { return ; }
-		if( x>=this.cols || y>= this.rows ) { return ; }
 
-		this.x = x;
-		this.y = y;
+	setPos( x, y ) {
+
+		this._int_setPos( x,y );
+
+		this._int_flush();
+	}
+
+	setCursorMode( mode ) {
+		this.cursorMode = mode;
+		this._int_flush();
+	}
+
+	setCursorPos( x, y ) {
+		if( x<0 || y<0 ) { throw "pos("+x+","+y+") < 0" ; }
+
+		if( x>=this.acols || y>= this.arows ) { throw "pos("+x+","+y+") > max" ; }
+
+		this.x = x + this.ax0;
+		this.y = y + this.ay0;
 
 		this._int_flush();
 	}
 
 	getCursorPos() {
-			return [this.x, this.y ];
+			return [this.x - this.ax0, this.y - this.ay0 ];
 	}
 
 	control( chr, data ) {
@@ -6259,6 +9129,20 @@ class TextArea {
 
 	}
 
+
+	_int_setPos( x, y ) {
+
+		if(x >= 0) {
+				this.x = x + this.ax0;
+		}
+		if(y >= 0) {
+				this.y = y + this.ay0;
+		}
+
+		if( this.x >= this.acols ) { this.x = this.acols-1;}
+		if( this.y >= this.arows ) { this.y = this.arows-1;}
+	}
+
 	center( str ) {
 
 			if( str.length > this.cols ) {
@@ -6266,23 +9150,33 @@ class TextArea {
 			}
 
 			var l = str.length;
-			var l2 = Math.floor( l/2 );
+			var l2 = l/2;
 
-			var wh = this.getDimensions();
+			var wh = [ this.acols, this.arows ];
 
-			var x = Math.floor( wh[0] / 2 ) - l2;
+			var x = Math.floor( (wh[0] / 2)-l2 );
 			this._int_setPos( x, -1 );
 			this._int_write( str );
+			this.__int_nl();
 
-			var area = this._int_getArea( 0, this.y, this.cols-1, this.y );
+			var area = this._int_getArea( this.ax0, this.y, this.acols-1, this.y );
 			this._int_addChange( area );
 			this._int_flush();
 
 	}
 
 	__int_scrollDown() {
-		for( var x=0; x<this.cols; x++) {
-			for( var y=0; y<this.rows-1; y++) {
+
+		var ax0 = this.ax0;
+		var ay0 = this.ay0;
+
+		for( var ax=0; ax<this.acols; ax++) {
+
+			var x = ax + ax0;
+			for( var ay=0; ay<this.arows-1; ay++) {
+
+				var y = ay + ay0;
+
 				var cell = this.cellel[ y ][ x ];
 				var cellyp1 = this.cellel[ y+1 ][ x ];
 
@@ -6293,17 +9187,20 @@ class TextArea {
 		}
 
 		//fill last row
-		var y2 = this.rows-1;
-		for( var x=0; x<this.cols; x++) {
+		var y2 = ay0 + (this.arows-1);
+		for( var ax=0; ax<this.acols; ax++) {
+
+			var x = ax + ax0;
+
 			var cell = this.cellel[ y2 ][ x ];
 			cell.txt = " ";
 			if( !this.reverse  ) {
 				cell.fg = this.colors.txtColor;
-				cell.bg = undefined;
+				cell.bg = this.colors.txtBgColor;
 			}
 			else {
-				cell.fg = this.colors.txtColor;
-				cell.bg = "rgba(0,255,0,0.0)";
+				cell.fg = this.colors.txtBgColor;
+				cell.bg = this.colors.txtColor;
 			}
 		}
 
@@ -6325,7 +9222,25 @@ class BitMap {
     this.changes = {};
     this.changes.flag = false;
     this.changes.pixels = [];
+
+		this.origin( 0,0,1,1);
   }
+
+
+	origin( ox0, oy0, odx, ody ) {
+		this.ox0 = ox0;
+		this.oy0 = oy0;
+		this.odx = odx;
+		this.ody = ody;
+
+		var dir = ["m",undefined,"p"];
+		var xdir = "x" + dir[ odx + 1 ];
+		var ydir = "y" + dir[ ody + 1 ];
+		var direction = xdir + ydir;
+
+		this["_int_convertxy"] = this.getConvertFunc( direction );
+
+	}
 
 	reInit( w, h ) {
 		this.width = w;
@@ -6343,15 +9258,6 @@ class BitMap {
   getDimensions() {
 			return [this.width, this.height ];
 	}
-
-
-  line( x0,y0, x1, y1 ) {
-    this.sys.post( "nativeout",{
-      action: "line",
-      params: { x0:x0, y0:y0, x1:x1, y1:y1 }
-    });
-  }
-
 
   triggerFlush() {
 
@@ -6375,15 +9281,7 @@ class BitMap {
 
   }
 
-  plot( x, y ) {
-    var pixel = { x: Math.floor(x), y:Math.floor(y), c:this.lineColor };
-
-    this.changes.pixels.push( pixel );
-    this.changes.flag = true;
-
-  }
-
-  setLineColor( c ) {
+	setLineColor( c ) {
     this.lineColor = c;
     this.sys.post( "nativeout",{
       action: "gcolor",
@@ -6391,9 +9289,237 @@ class BitMap {
     });
   }
 
+	getConvertFunc( direction ) {
+		var __this = this;
+		if( direction == "xpyp") {
+			return function( x,y ) {
+				return [ Math.floor(x + __this.ox0), Math.floor(y + __this.oy0)];
+			}
+		}
+		else if( direction == "xpym") {
+			return function( x,y ) {
+				return [ Math.floor(x + this.ox0), Math.floor( this.oy0 - y ) ];
+			}
+		}
+		else if( direction == "xmyp") {
+			return function( x,y ) {
+				return [ Math.floor( __this.ox0 - x ), Math.floor(y + __this.oy0)];
+			}
+		}
+		else if( direction == "xmym") {
+			return function( x,y ) {
+				return [ Math.floor( __this.ox0 - x ), Math.floor( this.oy0 - y ) ];
+			}
+		}
+	}
+
+	_int_convertxy_xpyp( x,y ) {
+		return [ Math.floor(x + this.ox0), Math.floor(y + this.oy0)];
+	}
+
+	_int_convertxy_xpym( x,y ) {
+		return [ Math.floor(x + this.ox0), Math.floor( this.oy0 - y )];
+	}
+
+	_int_convertxy_xmyp( x,y ) {
+		return [ Math.floor( this.ox0 - x), Math.floor( y + this.oy0)];
+	}
+
+	_int_convertxy_xmym( x,y ) {
+		return [ Math.floor( this.ox0 - x), Math.floor( this.oy0 - y )];
+	}
+
+
+  plot( x, y ) {
+		var xy2 = this._int_convertxy( x, y );
+
+    var pixel = { x: xy2[0], y: xy2[1], c:this.lineColor };
+
+    this.changes.pixels.push( pixel );
+    this.changes.flag = true;
+
+  }
+
+	line( x0,y0, x1, y1 ) {
+
+		var xy0 = this._int_convertxy( x0, y0 );
+		var xy1 = this._int_convertxy( x1, y1 );
+
+    this.sys.post( "nativeout",{
+      action: "line",
+      params: { x0:xy0[0], y0:xy0[1], x1:xy1[0], y1:xy1[1] }
+    });
+  }
+
 	destroy() {
 
 	}
+}
+
+//--EOC 
+
+// ## ../../rwbuffers/worker/audio.js ==========---------- 
+// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+//  src/sys/modules/basic/worker/../../rwbuffers/worker/audio.js
+//  BY packworkers.js -- src/sys/modules/basic/worker/../../rwbuffers/worker/audio.js
+
+class Audio {
+
+	constructor( sys ) {
+		this.sys = sys;
+		this.userInput = false;
+  }
+
+	flagUserInput() {
+		this.userInput = true;
+	}
+
+  playBeep( channel, frequency, len ) {
+
+		if( !this.userInput ) { return; }
+    this.sys.post( "audio",
+    {
+          method: "playBeep",
+					parCount: 3,
+					p1: channel,
+					p2: frequency,
+					p3: len
+    }
+    );
+  }
+
+	playSound( channel, frequency, len ) {
+
+		if( !this.userInput ) { return; }
+    this.sys.post( "audio",
+    {
+          method: "playSound",
+					parCount: 3,
+					p1: channel,
+					p2: frequency,
+					p3: len
+    }
+    );
+  }
+
+	volume( volume ) {
+
+		if( !this.userInput ) { return; }
+		this.sys.post( "audio",
+		{
+					method: "setVolume",
+					parCount: 1,
+					p1: volume
+		}
+		);
+	}
+
+	reset() {
+
+		if( !this.userInput ) { return; }
+		this.sys.post( "audio",
+			{
+						method: "reset",
+						parCount: 0
+			}
+			);
+
+	}
+
+	attackDecayRelease( channel, attackT, decayT, releaseT ) {
+
+		if( !this.userInput ) { return; }
+		this.sys.post( "audio",
+		{
+					method: "channelSetAttackDecayRelease",
+					parCount: 4,
+					p1: channel,
+					p2: attackT,
+					p3: decayT,
+					p4: releaseT
+		}
+		);
+	}
+
+	channelVolume( channel, v ) {
+
+		if( !this.userInput ) { return; }
+		this.sys.post( "audio",
+		{
+					method: "channelVolume",
+					parCount: 2,
+					p1: channel,
+					p2: v
+		}
+		);
+	}
+
+	channelFrequency( channel, v ) {
+
+		if( !this.userInput ) { return; }
+		this.sys.post( "audio",
+		{
+					method: "channelFrequency",
+					parCount: 2,
+					p1: channel,
+					p2: v
+		}
+		);
+	}
+
+
+	channelSustainVolume( channel, v ) {
+
+		if( !this.userInput ) { return; }
+		this.sys.post( "audio",
+		{
+					method: "channelSetSustainLevel",
+					parCount: 2,
+					p1: channel,
+					p2: v
+		}
+		);
+	}
+
+	addEffect( channel,  type , value, time ) {
+		if( !this.userInput ) { return; }
+		this.sys.post( "audio",
+		{
+					method: "addEffect",
+					parCount: 4,
+					p1: channel,
+					p2: type,
+					p3: value,
+					p4: time
+		}
+		);
+  }
+
+  clearEffect( channel ) {
+		if( !this.userInput ) { return; }
+		this.sys.post( "audio",
+		{
+					method: "clearEffect",
+					parCount: 1,
+					p1: channel
+		}
+		);
+
+  }
+
+	playEffect( channel, freq ) {
+		if( !this.userInput ) { return; }
+		this.sys.post( "audio",
+		{
+					method: "playEffect",
+					parCount: 2,
+					p1: channel,
+					p2: freq
+		}
+		);
+
+	}
+
 }
 
 //--EOC 

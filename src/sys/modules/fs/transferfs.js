@@ -17,8 +17,13 @@ class FILESYSMODULE {
 
   }
 
-  isASynch() {
-    return false;
+  makeError( reason, details ) {
+    return {
+      success: false,
+      reason: reason,
+      details: details,
+      fsErrorSignature: true,
+    }
   }
 
   ready() {

@@ -9,7 +9,7 @@ class Parser {
 
   init() {
 
-	  this.CTRL_KW = ["IF","THEN","GOTO","AND", "NOT", "OR",  "GOSUB", "RETURN", "FOR", "TO", "NEXT", "STEP", "DATA", "REM", "GOSUB", "DIM", "END", "LET", "STOP", "DEF", "FN", "ON" ];
+	  this.CTRL_KW = ["IF","THEN","GOTO","AND", "NOT", "OR",  "GOSUB", "RETURN", "FOR", "TO", "NEXT", "STEP", "DATA", "REM", "GOSUB", "DIM", "END", "LET", "STOP", "DEF", "FN", "ON", "SUB", "INTERRUPT0", "INTERRUPT1" ];
     this.SHORTCUT_KW = ["?"];
 
     this.KEYWORDS = this.commands.getStatements();
@@ -844,7 +844,7 @@ class Parser {
 
   }
 
-  parseControlStructure(  context, preTokens, commands, command, nameToken, token0  ) {
+  parseControlStructure(  context, preTokens, commands, command, handlers, nameToken, token0  ) {
 
     var token = token0;
 		var tokens = context.tokens;
@@ -999,20 +999,28 @@ class Parser {
         token = tokens.shift();
 
         if( token === undefined ) {
-          this.throwError( context, "GOTO/GOSUB expects number", "undef'd statement");
+          this.throwError( context, "GOTO/GOSUB expects linenumber or label", "undef'd statement");
         }
 
         if( token.type != "num") {
           //this.throwError( context, "GOTO/GOSUB expects number", "undef'd statement");
 
-          tokens.unshift( token );
+          if( token.type != "name") {
+              this.throwError( context, "GOTO/GOSUB expects linenumber or label", "undef'd statement");
+          }
 
-          var endTokens = [];
-          endTokens.push( { type: "cmdsep", data: "@@@all" });
+          var label = token.data;
 
-          var expression = this.parseBoolExpression( context, endTokens );
+          token = tokens.shift();
+          if( token !== undefined ) {
+            if( token.type != "cmdsep") {
+              this.throwError( context, "Expected \"command separator\", instead of '"+token.data+"'");
+            }
+          }
+
           command.params=[];
-          command.params[0] = expression;
+          command.params[0] = label;
+          command.label = true;
           commands.push( command );
           return;
 
@@ -1027,60 +1035,116 @@ class Parser {
 
         command.params=[];
         command.params[0] = num;
+        command.label = false;
         commands.push( command );
 
       }
       else if( controlToken == "ON" ) {
         var nums = [];
+        var onInterrupt = false;
 
         endTokens = [];
         endTokens.push( { type: "name", data: "GOTO" });
         endTokens.push( { type: "name", data: "GOSUB" });
 
-        var onExpr = this.parseBoolExpression( context, endTokens );
+        token = tokens.shift();
+        var onExpr = null;
+
+        if( token.type == "name" && (token.data == "INTERRUPT0" || token.data == "INTERRUPT1")) {
+          onInterrupt = true;
+          onExpr = {
+            type: "control",
+            data: token.data
+          }
+        }
+        else {
+          tokens.unshift( token );
+          onExpr = this.parseBoolExpression( context, endTokens );
+        }
 
         token = tokens.shift();
         if( token.type != "name") {
           this.throwError( context, "ON expects GOTO/GOSUB");
         }
-        if( !( token.data == "GOTO" || token.data == "GOSUB" )) {
-          this.throwError( context, "ON expects GOTO/GOSUB");
+
+        if( !onInterrupt ) {
+          if( !( token.data == "GOTO" || token.data == "GOSUB" )) {
+            this.throwError( context, "ON expects GOTO/GOSUB");
+          }
         }
+        else {
+          if( !( token.data == "GOTO" )) {
+            this.throwError( context, "ON INTERRUPT expects GOTO");
+          }
+        }
+
         var onType = token.data;
 
         token = tokens.shift();
 
-        if( token.type != "num") {
-          this.throwError( context, "ON GOTO/GOSUB expects number", "undef'd statement");
-        }
+        var labelFlag = false;
+        var label = "";
+        var num0;
 
         if( token.type != "num") {
-          this.throwError( context, "ON GOTO/GOSUB expects number",  "undef'd statement");
+
+            if( token.type != "name") {
+                this.throwError( context, "GOTO/GOSUB expects linenumber or label", "undef'd statement");
+            }
+
+            labelFlag = true;
+            label = token.data;
+
         }
-        nums.push(  parseInt(token.data) );
-
-        while ( true ) {
-
-          token = tokens.shift();
-          if( token == undefined ) { break; }
-          if( token.type == "cmdsep") { break; }
-          if( token.type == "cmdsep") { break; }
-          if( !( token.type == "sep" && token.data == "," )) {
-            this.throwError( context, "ON GOTO/GOSUB expects numberlist");
-          }
-
-          token = tokens.shift();
-          if( token.type != "num") {
-            this.throwError( context, "GOTO/GOSUB expects number");
-          }
-          nums.push(  parseInt(token.data) );
+        else {
+          num0  = parseInt(token.data);
         }
 
-        command.params=[];
-        command.params[0] = onType.toLowerCase();
-        command.params[1] = onExpr;
-        command.params[2] = nums;
-        commands.push( command );
+        nums.push( num0 );
+
+        if( !onInterrupt ) {
+          while ( true ) {
+
+            token = tokens.shift();
+            if( token == undefined ) { break; }
+            if( token.type == "cmdsep") { break; }
+            if( token.type == "cmdsep") { break; }
+            if( !( token.type == "sep" && token.data == "," )) {
+              this.throwError( context, "ON GOTO/GOSUB expects numberlist");
+            }
+
+            token = tokens.shift();
+            if( token.type != "num") {
+              this.throwError( context, "GOTO/GOSUB expects number");
+            }
+            nums.push(  parseInt(token.data) );
+          }
+
+          if( nums.length > 1 ) {
+            this.throwError( context, "ON INTERUPT GOTO expects only a single line number");
+          }
+
+          command.params=[];
+          command.params[0] = onType.toLowerCase();
+          command.params[1] = onExpr;
+          command.params[2] = nums;
+          commands.push( command );
+        }
+        else {
+
+          command.params=[];
+          command.params[0] = onExpr.data.toLowerCase();
+          if ( labelFlag ) {
+              command.params[1] = label;
+          }
+          else {
+              command.params[1] = num0;
+          }
+          command.label = labelFlag;
+
+          commands.push( command );
+
+        }
 
       }
       else if( controlToken == "RETURN") {
@@ -1242,7 +1306,9 @@ class Parser {
           }
         }
 
-        var block = this.parseLineCommands( context );
+        //var block = this.parseLineCommands( context );
+        var result = this.parseLineCommands( context );
+        var block = result.commands;
 
         if( this.debugFlag ) {
           console.log( block );
@@ -1295,7 +1361,26 @@ class Parser {
         commands.push( command );
 
       }
-      else if( controlToken == "REM") {
+      else if( controlToken == "SUB") {
+
+        var label = "";
+        token = tokens.shift();
+        if( token == null ) { throw "SUB expected label"; }
+
+        if( token.type != "name" ) {
+          throw "SUB expected label not '" +token.data+ "'";
+        }
+
+        label = token.data.toUpperCase();
+
+        token = tokens.shift();
+        if( token != null ) { throw "SUB unexpected data after label"; }
+
+        command.label = label;
+        commands.push( command );
+
+      }
+      else if( controlToken == "REM" ) {
 
         while( true ) {
 
@@ -1377,6 +1462,7 @@ class Parser {
 
 		var tokens = context.tokens;
 		var commands = [];
+    var handlers = {};
 
 		var i=1;
 		while( true ) {
@@ -1429,7 +1515,7 @@ class Parser {
 
       if (  control ) {
 
-        this.parseControlStructure( context, preTokens, commands, command, nameToken, token );
+        this.parseControlStructure( context, preTokens, commands, command, handlers, nameToken, token );
 
       }
 			else if( token.type == "eq") {
@@ -1444,14 +1530,20 @@ class Parser {
       else {
           if( !keyword ) {
             console.log("Dump: ",context, preTokens, commands, command, nameToken, token);
-            this.throwError( context, "no such statement: " + nameToken );
+            this.throwError( context, "no such command: " + nameToken );
           }
           this.parseStatementCall( context, preTokens, commands, command, nameToken, token );
 
       }
 
 		}
-    return commands;
+
+    var result = {
+        commands: commands,
+        handlers: handlers
+      };
+
+    return result;
 	}
 
   logTokens( tokens ) {
@@ -1473,6 +1565,57 @@ class Parser {
     for( var i=0; i<tokens.length; i++) {
         var tok = tokens[i];
         console.log("token: ",tok);
+    }
+
+  }
+
+
+
+
+  parseErrorLine( line ) {
+
+    var lineRecord = {
+      lineNumber: -1,
+      commands: []
+    };
+
+    var errContext, detail, lineNr=-1;
+
+    errContext="tokenizer";
+    detail="init";
+		var toker = new Tokenizer( new StringReader ( line ), this.KEYWORDS );
+
+    detail="parsing tokens";
+    var tokens = toker.tokenize();
+    if( this.debugFlag ) {
+      console.log("Tokens after tokenizer");
+    }
+    this.logTokens( tokens );
+
+    detail="internal";
+    tokens = this.upperCaseNameTokens( tokens );
+    tokens = this.removePadding( tokens );
+    tokens = this.mergeCompTokens( tokens );
+    tokens = this.mergeBrokenUpTokens( tokens );
+
+
+    if( this.debugFlag ) {
+      console.log("Tokens after merge");
+    }
+    this.logTokens( tokens );
+
+    if( tokens.length == 0 ) {
+			return null;
+		}
+
+		if( tokens[0].type == "num" ) {
+			lineRecord.lineNumber = tokens[0].data;
+      lineNr = tokens[0].data;
+      var lineRest = line.substr( lineNr.length );
+      return this.parseLine( lineNr + " REM[ERROR] " + lineRest  );
+    }
+    else {
+      throw "Expected line number, when reparsing line with error";
     }
 
   }
@@ -1526,9 +1669,11 @@ class Parser {
 
       errContext = "parser";
       detail="parsing commands";
-      var commands = this.parseLineCommands( context );
+      var result = this.parseLineCommands( context );
+      var commands = result.commands;
       lineRecord.commands = commands;
       lineRecord.raw = line;
+      lineRecord.handlers = result.handlers;
       return lineRecord;
     }
     catch ( e ) {

@@ -8,6 +8,7 @@ class KERNALMODULE {
     }
 
     this.sys = sys;
+    this.disable = sys.bootCfg.warnings.privacyMute;
     this.key = sys.SIG + "__LSConfirmed" ;
     this.verified = false;
     this.denied = false;
@@ -17,7 +18,7 @@ class KERNALMODULE {
   }
 
   init() {}
-  
+
   confirmLocalStorage() {
 
     if( this.denied ) {
@@ -26,6 +27,11 @@ class KERNALMODULE {
 
     var confirmed = localStorage.getItem( this.key );
     if( confirmed == "true" ) { return true; }
+
+    if( this.disable ) {
+      return true;
+    }
+
 
     var ok = confirm("!! Do you allow "+
       this.sys.SIG +

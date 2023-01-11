@@ -22,8 +22,7 @@ class KERNALMODULE {
 
 			var textmode1 = "text:80x30";
 			var textmode2 = "text:80x50";
-			var textmode3 = "text:120x50";
-			var textmode4 = "text:80x150";
+			var textmode3 = "text:80x150";
 
 			var fontSmall = 	"font=14";
 			var fontMedium1 = "font=16";
@@ -45,22 +44,33 @@ class KERNALMODULE {
 			this.modes[10] = textmode3 + ":" + fontMedium2;
 			this.modes[11] = textmode3 + ":" + fontBig;
 
-			this.modes[12] = textmode4 + ":" + fontSmall;
-			this.modes[13] = textmode4 + ":" + fontMedium1;
-			this.modes[14] = textmode4 + ":" + fontMedium2;
-			this.modes[15] = textmode4 + ":" + fontBig;
+			this.modes[100] = "canvas:%95";
 
-			this.modes[100] = "canvas:1024x768";
+			this.modes[101] = "canvas:%85";
+			this.modes[102] = "canvas:%75";
+			this.modes[103] = "canvas:%65";
+			this.modes[104] = "canvas:%45";
+			this.modes[105] = "canvas:%35";
+			this.modes[106] = "canvas:%25";
+			this.modes[107] = "canvas:%15";
 
-			this.modes[200] = "canvas:800x600";
-			this.modes[201] = "canvas:640x512";
-			this.modes[202] = "canvas:640x480";
-			this.modes[203] = "canvas:640x400";
-			this.modes[204] = "canvas:320x512";
-			this.modes[205] = "canvas:320x400";
-			this.modes[206] = "canvas:320x256";
-			this.modes[207] = "canvas:320x200";
+			this.modes[110] = "canvas:%%95,25";
+			this.modes[111] = "canvas:%%95,50";
+			this.modes[120] = "canvas:%%25,95";
+			this.modes[121] = "canvas:%%50,95";
 
+			this.modes[200] = "canvas:1024x768";
+
+			this.modes[500] = "canvas:800x600";
+			this.modes[501] = "canvas:640x512";
+			this.modes[502] = "canvas:640x480";
+			this.modes[503] = "canvas:640x400";
+			this.modes[504] = "canvas:320x512";
+			this.modes[505] = "canvas:320x400";
+			this.modes[506] = "canvas:320x256";
+			this.modes[507] = "canvas:320x200";
+
+			this.menuCreated = false;
 	}
 
 	getDriver() {
@@ -76,11 +86,25 @@ class KERNALMODULE {
 		return this.modes[ x ];
 	}
 
-	setMode( x ) {
+
+	getModes() {
+		return this.modes;
+	}
+
+	getCurrentMode() {
+		return this.currentMode;
+	}
+
+	setMode( x, menu ) {
 		this.init();
 
+
+		if( menu ) {
+			this.menu = menu;
+		}
+
 		if( x === undefined || x === null || x === -1 || Number.isNaN( x ) ) {
-			this.setMode( this.default );
+			this.setMode( this.default, menu );
 		}
 
 		var dc = this.getDeviceConfig( x );
@@ -91,9 +115,19 @@ class KERNALMODULE {
 		var cm = this.currentMode;
 		if( ! (cm === undefined || cm === null || cm === -1 || Number.isNaN( x ) ) ) {
 				this.endMode( this.currentMode );
+				this.menuCreated = false;
 		}
 
-		dc.device.initMode( dc.config );
+		if( !this.menuCreated ) {
+		 this.menu.create();
+		 this.menuCreated = true;
+		}
+
+		dc.device.initMode( dc.config, this.menu );
+		this.sys.out =  dc.device;
+
+		this.sys.out.notifyOnClick( this.sys.m.basicmenu, "onDeselect" );
+
 		this.currentMode = x;
 		this.currentDriver = dc.device;
 
@@ -110,6 +144,8 @@ class KERNALMODULE {
 		var dev = this.currentDriver;
 
 		dev.destroy();
+		this.menu.destroy();
+
 		this.currentMode = undefined;
 		this.currentDriver = undefined;
 

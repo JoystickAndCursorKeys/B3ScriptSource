@@ -13,6 +13,13 @@ class KERNALMODULE {
   init() {
   }
 
+  executeFunction( paramArray ) {
+    if( paramArray[0] == "body.style.backgroundImage") {
+      document.body.style.backgroundImage = "url('" +paramArray[1]+ "')";
+      document.body.style.backgroundSize = "cover";
+    }
+  }
+
   execute( htmlCodeArr ) {
     var htmlCode = htmlCodeArr[0];
     console.log( "execute",  htmlCode );

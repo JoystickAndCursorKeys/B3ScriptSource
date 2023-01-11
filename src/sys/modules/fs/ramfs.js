@@ -13,21 +13,38 @@ class FILESYSMODULE {
 
   init() {}
 
-  isASynch() {
-    return false;
-  }
-
   ready() {
     return true;
   }
 
-  getDir() {
-    return this.files;
+  getDir( path, defaultMatcherFunction ) {
+
+    var files = this.files;
+
+    if( path != "*" && path != "" ) {
+
+      var files2 = [];
+
+      for( var i=0; i<this.files.length; i++) {
+        if( defaultMatcherFunction (  path, this.files[i].fname ) ) {
+          files2.push( this.files[ i ] );
+        }
+      }
+
+      files = files2;
+    }
+
+    return {
+      title: "Ram Disk",
+      files: files,
+      free: 0
+    }
   }
 
   exists( fileName ) {
 
-    var files = this.getDir();
+    var dir = this.getDir("",null);
+    var files = dir.files;
 
     var found = -1;
     for( var i=0; i<files.length; i++) {
@@ -41,6 +58,15 @@ class FILESYSMODULE {
       return true;
     }
     return false;
+  }
+
+  makeError( reason, details ) {
+    return {
+      success: false,
+      reason: reason,
+      details: details,
+      fsErrorSignature: true,
+    }
   }
 
   saveFile( fileName, data, type, size ) {
@@ -63,13 +89,15 @@ class FILESYSMODULE {
 
   }
 
-  loadFile( fileName ) {
+  loadFile( fileName, cbRec ) {
 
     if( ! this.exists( fileName ) ) {
-      return null;
+      throw makeError("File not found");
     }
 
-    return this.data[ fileName ];
+    cbRec.clazz[ cbRec.method ]( fileName, cbRec, this.data[ fileName ].data );
+
+    //return this.data[ fileName ];
 
   }
 

@@ -1,38 +1,43 @@
 class COMMONBOOTLOADER {
 
-  constructor( staticFlag ) {
+  constructor( cfg, staticFlag ) {
 
     var sys = {};
     this.m = {};
     sys.m = this.m;
+    sys.bootCfg = cfg;
     this.sys = sys;
     sys.init = {};
     sys.staticTarget = staticFlag;
+    sys.headerElement = null;
 
     sys.domContainer = document.createElement("div");
     document.body.appendChild( sys.domContainer );
 
-    sys.SIG = "boss64";
-    sys.VERSION = "0.1";
+    sys.SIG = "BOSS64";
+    sys.SUBSYS = sys.bootCfg.subSys;
+    sys.VERSION = "0.2";
     sys.CODENAME = "Papa Smurf";
 
     sys.nulcon = [];
-    sys.nulcon.push("Starting BOSS...");
-    sys.nulcon.push("BOS version " + sys.VERSION);
-    sys.nulcon.push("BOS signature " + sys.SIG);
-    sys.nulcon.push("BOS release name \"" + sys.CODENAME + "\"");
+    sys.nulcon.push("Starting System...");
+    sys.nulcon.push("SYS version " + sys.VERSION);
+    sys.nulcon.push("SYS name " + sys.SIG + ":" + sys.SUBSYS + " \"" + sys.CODENAME + "\"");
+    sys.nulcon.push("SYS release name \"" + sys.CODENAME + "\"");
     sys.nulcon.push("Starting Boot Sequence...");
-
 
     var rootScript = document.getElementById("boot");
     this.rootScript = rootScript;
 
-
     this.displayMode = parseInt( rootScript.dataset.mode );
+    if( isNaN( this.displayMode ) ) {
+      this.displayMode = cfg.display.mode;
+    }
 
     this.bootMode = rootScript.dataset.boot;
 
-    this.dynamicMinTarget = (this.bootMode.indexOf("min") >= 0);
+    this.dynamicMinTarget = false;
+    if( this.bootMode ) { this.dynamicMinTarget = (this.bootMode.indexOf("min") >= 0) };
     sys.dynamicMinTarget = this.dynamicMinTarget;
 
     this.bootDebug = (this.bootMode.indexOf("debug") >= 0);

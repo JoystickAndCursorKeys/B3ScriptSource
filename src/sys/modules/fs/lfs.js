@@ -6,10 +6,17 @@ class FILESYSMODULE {
     }
     this.initialized = false;
     this.sys = sys;
-    this.prefix = sys.SIG + "__" ;
+    this.prefix = sys.SIG + "_" + sys.SUBSYS + "__" ;
 
-    console.log( sys );
+    console.log( "FILESYSMODULE lfs: " + this.prefix );
 
+  }
+
+  makeDataContainer( data ) {
+    return {
+      success: true,
+      data: data
+    }
   }
 
   init() {
@@ -32,11 +39,14 @@ class FILESYSMODULE {
       this.disks = [ diskId ];
       this.currentDisk = diskId;
       this.lastDisk = 1;
+      this.disksNotInitialized = true;
 
       if( this.privacy.confirmLocalStorage() == true ) {
         localStorage.setItem( this.prefix + "disks_list", JSON.stringify( this.disks ) );
         localStorage.setItem( this.prefix + "0001_dir", JSON.stringify( {files:[], title: diskName, readOnly: false } ) );
         localStorage.setItem( this.prefix + "disk_current", diskId );
+
+        this.formatDisk();
       }
     }
     else {
@@ -57,9 +67,6 @@ class FILESYSMODULE {
 
   }
 
-  isASynch() {
-    return false;
-  }
 
   selectDisk( diskId ) {
     this.currentDisk = diskId;
@@ -92,7 +99,7 @@ class FILESYSMODULE {
     return {files:[], title: "null" };
   }
 
-  getDir() {
+  getDir( path, defaultMatcherFunction ) {
 
     if( !this.initialized ) {
       return getEmptyDirStructure(null);
@@ -128,31 +135,28 @@ class FILESYSMODULE {
         break;
       }
     }
+
+    if( path != "*" && path != "" ) {
+
+      var files2 = [];
+
+      for( var i=0; i<dir.files.length; i++) {
+        if( defaultMatcherFunction (  path, dir.files[i].fname ) ) {
+          files2.push( dir.files[ i ] );
+        }
+      }
+
+      dir.files = files2;
+      dir.free = 32-dir.files.length;
+    }
+
+
+
     return dir;
 
   }
 
-  getSelectedDir( x ) {
 
-    if( !this.initialized ) {
-      return {files:[], title: "null" };
-    }
-
-    var storageName =  this.prefix + "" + x + "_dir";
-    var json = localStorage.getItem( storageName );
-    var dir = JSON.parse( json );
-
-    //var title = "0 \u0012\""+dir.title+"          \"\u0092 00 2A";
-    var title = dir.title;
-
-    if(!json) {
-      return {files:[], title: title };
-    }
-    dir.title = title;
-    dir.free = 32-dir.files.length;
-    return dir;
-
-  }
 
   setDir( dir ) {
 
@@ -174,7 +178,7 @@ class FILESYSMODULE {
       return false;
     }
 
-    var dir = this.getDir();
+    var dir = this.getDir("", null );
 
     var found = -1;
     for( var i=0; i<dir.files.length; i++) {
@@ -197,7 +201,7 @@ class FILESYSMODULE {
       return;
     }
 
-    var dir = this.getDir();
+    var dir = this.getDir("", null);
 
     var found = -1;
     for( var i=0; i<dir.files.length; i++) {
@@ -219,7 +223,7 @@ class FILESYSMODULE {
       return;
     }
 
-    var dir = this.getDir();
+    var dir = this.getDir( "", null );
 
     var found = -1;
     for( var i=0; i<dir.files.length; i++) {
@@ -262,47 +266,67 @@ class FILESYSMODULE {
     if( this.privacy.confirmLocalStorage() == true ) {
       localStorage.setItem(storageName, container );
       this.updateDir( fileName, length, type );
+
+      return true;
+    }
+
+    return false;
+  }
+
+
+  makeError( reason, details ) {
+    return {
+      success: false,
+      reason: reason,
+      details: details,
+      fsErrorSignature: true,
     }
   }
 
-  loadJSONFile( fileName ) {
+  loadFile( fileName0, cbRec ) {
+
+    var makeError = this.makeError;
 
     if( !this.initialized ) {
-      return null;
+      throw makeError("Filesystem not initialized");
+    }
+
+    var fileName = fileName0;
+
+    if( fileName == "*" )  {
+        var dir = this.getDir("",null);
+        if( dir.files ) {
+          if( dir.files.length > 0) {
+            if( dir.files[0]) {
+              fileName = dir.files[0].fname;
+            }
+          }
+        }
     }
 
     var storageName =  this.prefix + "" + this.currentDisk + "_" + fileName;
 
     var json = localStorage.getItem( storageName );
-
-    return JSON.parse( json );
-  }
-
-  loadFile( fileName0 ) {
-
-    if( !this.initialized ) {
-      return null;
+    if(!json) {
+      throw makeError("File not found");
     }
 
-    var fileName = fileName0;
-    if( fileName0.length > 32) {
-        fileName = fileName0.substr(0,32);
+    var data;
+    try {
+      data = JSON.parse( json ).data;
+    }
+    catch( e ) {
+      throw makeError("File corrupt", e);
+      return;
     }
 
-    if( fileName.startsWith("$/") ) {
-      fileName = fileName.substr( 2 );
-    }
+    cbRec.clazz[ cbRec.method ]( fileName0, cbRec, this.makeDataContainer( data ) );
 
-    var storageName =  this.prefix + "" + this.currentDisk + "_" + fileName;
-
-    var data = localStorage.getItem( storageName );
-
-    return JSON.parse( data );
   }
 
   deleteFile( fileName ) {
     if( ! this.existsFile( fileName ) ) {
-      return "no such file";
+      throw "no such file";
     }
 
     try {
@@ -310,9 +334,9 @@ class FILESYSMODULE {
       this._removeFile( fileName );
     }
     catch ( e ) {
-      return "unexpected";
+      throw "unexpected ("+e.message+")";
     }
-    return "ok";
+    return true;
   }
 
   _removeFile( fileName ) {
@@ -327,7 +351,7 @@ class FILESYSMODULE {
 
   formatDisk() {
 
-    var dir = this.getDir();
+    var dir = this.getDir("", null);
 
     for( var i=0; i<dir.files.length; i++) {
 
@@ -410,7 +434,7 @@ class FILESYSMODULE {
 
     if( !this.initialized ) {
 
-      var dir = this.getDir();
+      var dir = this.getDir( "", null);
 
       var disk = {
         dir: dir,
@@ -422,7 +446,7 @@ class FILESYSMODULE {
       return diskStr;
     }
 
-    var dir = this.getDir();
+    var dir = this.getDir("", null);
     var content = [];
 
     for( var i=0; i<dir.files.length; i++) {

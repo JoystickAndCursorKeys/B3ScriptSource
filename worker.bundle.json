@@ -6,10 +6,11 @@
         "target": "tmp/basicworker.js",
         "files": [
           "sys.js",
-          "basicarray.js",   "basicerrorhandler.js",   "editor.js",  "basicruntime.js",    "extendedcommands.js",  "pgmmanager.js",
-          "basiccommands.js",  "basicparser.js",  "basictokenizer.js",  "input.js",  "processes.js",
+          "basicarray.js",   "basicerrorhandler.js",   "coding/codingeditor.js",  "basicruntime.js",    "extendedcommands.js",  "pgmmanager.js",
+          "basiccommands.js",  "basicparser.js",  "basictokenizer.js",  "input.js",  "processes.js", "commandhelp.js",
           "../../rwbuffers/worker/textarea.js",
           "../../rwbuffers/worker/bitmap.js",
+          "../../rwbuffers/worker/audio.js",
           "workerbootstrap_static.js"
         ]
     }]

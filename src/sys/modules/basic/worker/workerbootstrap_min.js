@@ -6,11 +6,12 @@ sys.log("Starting");
 try {
   importScripts(
     "../rwbuffers/worker/textarea.js",
-    "../rwbuffers/worker/bitmap.js",    
+    "../rwbuffers/worker/bitmap.js",
     "processes.js",
     "basictokenizer.js",
     "basicparser.js",
     "basicerrorhandler.js",
+    "commandhelp.js",    
     "basiccommands.js",
     "extendedcommands.js",
     "basicarray.js",

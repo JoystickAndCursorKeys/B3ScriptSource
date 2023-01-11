@@ -14,25 +14,30 @@ class Input {
 
     this.interactive = flag;
     this.sys.blinkMode( flag  );
-    
+
+  }
+
+  flush() {
+    this.keyPress = [];
   }
 
   inputKeyHandler( e )  {
 
     var hc = this.handlerClazz;
-    if( !this.interactive ) {
 
-      if( e.keyLabel == "Escape" ) {
-          hc["stop"]();
-      }
-      else {
+    if( e.keyLabel == "Escape" ) {
+        hc["stop"]();
+        return;
+    }
+
+    hc["keyInterrupt"]( "keypress", e );
+
+    if( !this.interactive ) {
         this.keyPress.push( e );
-      }
     }
     else {
-
         hc["interactiveKeyHandler"]( e );
-    }
+      }
   }
 
   getKey() {

@@ -18,7 +18,7 @@ class KERNALMODULE {
 		this.fontFamily = "monospace";
 
 
-		this.colors = [
+		this.htmlPalette = [
 			"#000000",
 			"#ffffff",
 			"#ee2222",
@@ -38,9 +38,13 @@ class KERNALMODULE {
 
 		];
 
-		this.outColors.txtBgColor= this.colors[0];
-		this.outColors.txtColor = this.colors[5];
+		this.outColors.txtBgColor= this.htmlPalette[0];
+		this.outColors.txtColor = this.htmlPalette[5];
 
+	}
+
+	htmlColor( ix ) {
+		return this.htmlPalette[ ix ];
 	}
 
 
@@ -75,12 +79,12 @@ class KERNALMODULE {
 				return [this.cols, this.rows ];
 		}
 
-		initMode( m ) {
+		initMode( m, headerElementManager ) {
 
 			var sys = this.sys;
 			var msgs = sys.init.queuedMessages;
 
-			sys.init.inputElement = document.body;
+			sys.init.inputElement = window;
 
 			this.x = 0;
 			this.y = 0;
@@ -106,8 +110,8 @@ class KERNALMODULE {
 			}
 
 			this.colsPercentage = (1/this.cols) * 100;
-			this.outColors.txtBgColor = this.colors[ 4 ];
-			this.outColors.txtColor = this.colors[ 1 ];
+			this.outColors.txtBgColor = this.htmlPalette[ 4 ];
+			this.outColors.txtColor = this.htmlPalette[ 1 ];
 
 			/* Build DOM */
 
@@ -230,7 +234,27 @@ class KERNALMODULE {
 			this.table.style.marginRight = "auto";
 
 			this.outDiv0.appendChild( this.outDiv1 );
+
+			if( headerElementManager ) {
+				this.headerElementManager = headerElementManager;
+				this.outDiv1.appendChild( this.headerElementManager.get() );
+				//this.headerElementManager.setDimensions( this.fontSizeInt * this.cols, 480 );
+
+				this.headerElementManager.enable();
+			}
+
+/*			if( this.sys.headerElement ) {
+				this.outDiv1.appendChild( this.sys.headerElement );
+}*/
+
 			this.outDiv1.appendChild( this.outEl );
+
+			if( headerElementManager ) {
+
+				this.headerElementManager.setDimensions( this.outEl.clientWidth, 480 );
+
+			}
+
 
 			this.outEl.focus( );
 
@@ -260,6 +284,10 @@ class KERNALMODULE {
 		this.blinking = mode;
 	}
 
+	notifyOnClick() {
+
+	}
+
 	hasPixels() {
 		return false;
 	}
@@ -278,8 +306,8 @@ class KERNALMODULE {
 				else {
 						cell.textContent = src.txt;
 				}
-				cell.style.color =  this.colors[ src.fg ];
-				cell.style.backgroundColor = this.colors[ src.bg ];
+				cell.style.color =  this.htmlPalette[ src.fg ];
+				cell.style.backgroundColor = this.htmlPalette[ src.bg ];
 
 			}
 		}
@@ -301,8 +329,8 @@ class KERNALMODULE {
 
 		}
 
-		this.outColors.txtBgColor= this.colors[ p.bg ];
-		this.outColors.txtColor = this.colors[ 	p.fg];
+		this.outColors.txtBgColor= this.htmlPalette[ p.bg ];
+		this.outColors.txtColor = this.htmlPalette[ 	p.fg];
 
 		for( var i=0; i< list.length; i++) {
 
@@ -329,8 +357,8 @@ class KERNALMODULE {
 			console.log("ouch");
 
 		}
-		this.outColors.txtBgColor= this.colors[ p.bg ];
-		this.outColors.txtColor = this.colors[ 	p.fg];
+		this.outColors.txtBgColor= this.htmlPalette[ p.bg ];
+		this.outColors.txtColor = this.htmlPalette[ 	p.fg];
 
 		this._int_updateArea( srccells, 0,0, this.cols -1, this.rows -1 );
 

@@ -6,7 +6,7 @@ class FILESYSMODULE {
     }
     this.initialized = false;
     this.sys = sys;
-    this.prefix = sys.SIG + "__" ;
+    this.prefix = sys.SIG + sys.SUBSYS  + "__" ;
   }
 
   init() {
@@ -16,6 +16,8 @@ class FILESYSMODULE {
   initialize() {
     this.currentDisk = "SYS";
     this.initialized=true;
+    this.privacy = this.sys.m.priv;
+
   }
 
   ready() {
@@ -23,10 +25,10 @@ class FILESYSMODULE {
   }
 
   getEmptyDirStructure(name) {
-    return {files:[], title: "null" };
+    return {files:[], title: "temporary session" };
   }
 
-  getDir() {
+  getDir( path, defaultMatcherFunction ) {
 
     if( !this.initialized ) {
       return getEmptyDirStructure(null);
@@ -34,14 +36,18 @@ class FILESYSMODULE {
 
     var storageName =  this.prefix + "" + this.currentDisk + "_dir";
     var json = sessionStorage.getItem( storageName );
-    var dir = JSON.parse( json );
-
-    //var title = "0 \u0012\""+dir.title+"          \"\u0092 00 2A";
-    var title = dir.title;
 
     if(!json) {
-      return {files:[], title: title };
+      return {files:[], title: "temporary session" };
     }
+
+    var dir = JSON.parse( json );
+    if(!dir) {
+      return {files:[], title: "temporary session" };
+    }
+
+    var title = dir.title;
+
     dir.title = title;
     dir.free = 32-dir.files.length;
 
@@ -62,6 +68,21 @@ class FILESYSMODULE {
         break;
       }
     }
+
+    if( path != "*" && path != "" ) {
+
+      var files2 = [];
+
+      for( var i=0; i<dir.files.length; i++) {
+        if( defaultMatcherFunction (  path, dir.files[i].fname ) ) {
+          files2.push( dir.files[ i ] );
+        }
+      }
+
+      dir.files = files2;
+      dir.free = 32-dir.files.length;
+    }
+        
     return dir;
 
   }
@@ -88,7 +109,7 @@ class FILESYSMODULE {
       return false;
     }
 
-    var dir = this.getDir();
+    var dir = this.getDir( "", null );
 
     var found = -1;
     for( var i=0; i<dir.files.length; i++) {
@@ -111,7 +132,7 @@ class FILESYSMODULE {
       return;
     }
 
-    var dir = this.getDir();
+    var dir = this.getDir("", null);
 
     var found = -1;
     for( var i=0; i<dir.files.length; i++) {
@@ -133,7 +154,7 @@ class FILESYSMODULE {
       return;
     }
 
-    var dir = this.getDir();
+    var dir = this.getDir( "", null );
 
     var found = -1;
     for( var i=0; i<dir.files.length; i++) {
@@ -177,17 +198,40 @@ class FILESYSMODULE {
     return true;
   }
 
-  loadFile( fileName ) {
+  makeError( reason, details ) {
+    return {
+      success: false,
+      reason: reason,
+      details: details,
+      fsErrorSignature: true,
+    }
+  }
+
+  loadFile( fileName, cbRec ) {
 
     if( !this.initialized ) {
-      return null;
+      throw makeError("Filesystem not initialized");
     }
 
     var storageName =  this.prefix + "" + this.currentDisk + "_" + fileName;
 
     var json = sessionStorage.getItem( storageName );
 
-    return JSON.parse( json );
+    if(!json) {
+      throw makeError("File not found");
+    }
+
+    var data;
+    try {
+      data = JSON.parse( json ).data;
+    }
+    catch( e ) {
+      throw makeError("File corrupt", e);
+      return;
+    }
+
+    cbRec.clazz[ cbRec.method ]( fileName, cbRec, data );
+
   }
 
   deleteFile( fileName ) {
@@ -217,7 +261,7 @@ class FILESYSMODULE {
 
   formatDisk() {
 
-    var dir = this.getDir();
+    var dir = this.getDir( "", null );
 
     for( var i=0; i<dir.files.length; i++) {
 
@@ -237,7 +281,7 @@ class FILESYSMODULE {
 
     if( !this.initialized ) {
 
-      var dir = this.getDir();
+      var dir = this.getDir( "", null);
 
       var disk = {
         dir: dir,
@@ -249,7 +293,7 @@ class FILESYSMODULE {
       return diskStr;
     }
 
-    var dir = this.getDir();
+    var dir = this.getDir("", null);
     var content = [];
 
     for( var i=0; i<dir.files.length; i++) {

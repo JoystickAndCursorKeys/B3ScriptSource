@@ -1,14 +1,12 @@
 class KERNALMODULE {
 
-	//TODO, keep colors somewhere, so multi colored text can be done
-	//with update, and scroll
-
 	constructor( sys ) {
 		this.sys = sys;
 		this.cursorOn = false;
 		this.hidden = false;
 		this.blinking = true;
 		this.reverse = false;
+		this.cursorMode = "insert";
 
 		this.colors ={};
 
@@ -16,12 +14,12 @@ class KERNALMODULE {
 			"#000000",
 			"#ffffff",
 			"#ee2222",
-			"#22ee22",
-			"#2222ee",
+			"#22aa22",
+			"#1111cc",
 			"#eeee22",
 			"#22eeee",
 			"#ee22ee",
-			"#aaaaaa",
+			"#bbbbbb",
 			"#777777",
 			"#444444",
 			"#FFAC1C",
@@ -31,6 +29,27 @@ class KERNALMODULE {
 			"#8379F8"
 
 		];
+
+
+		var pad2 = function( hs ) {
+			var rv = hs;
+			while ( rv.length < 2 ) {
+				rv = "0" + rv;
+			}
+			return rv;
+		}
+
+		var pl = this.palette.length;
+		for( var i=0; i < pl; i++) {
+			var htmlCol = this.palette[i];
+			var r = pad2( Math.floor(parseInt(htmlCol.substr(1,2),16) / 2).toString(16));
+			var g = pad2( Math.floor(parseInt(htmlCol.substr(3,2),16) / 2).toString(16));
+			var b = pad2( Math.floor(parseInt(htmlCol.substr(5,2),16) / 2).toString(16));
+			var newcolor = "#" + r + g + b;
+			this.palette.push( newcolor );
+
+		}
+
 
 		this.bmPalette = [];
 		for( var i=0; i<this.palette.length; i++) {
@@ -50,15 +69,19 @@ class KERNALMODULE {
 
 	}
 
+	htmlColor( ix ) {
+		return this.palette[ ix ];
+	}
+
 
 	destroy() {
 		this.outDiv0.remove();
 		this.cvs = null;
 		this.cvs2 = null;
-		this.cvs3 = null;
+		this.cvsCursor = null;
 		this.ctx = null;
 		this.ctx2 = null;
-		this.ctx3 = null;
+		this.ctxCursor = null;
 		this.cache = null;
 
 		this.cells = [];
@@ -75,10 +98,11 @@ class KERNALMODULE {
 		this.x = 0;
 		this.y = 0;
 
-		this.fontSize = "18";
+		this.fontSize = "20";  //16x10, 18x11, 20x12
 
 		this.fontSizeCSS = this.fontSize + "px";
-		this.fontSizeInt = parseInt( this.fontSize );
+		this.fontSizeIntW = 12 ; //Math.floor(parseInt( this.fontSize ) * .7)-1;
+		this.fontSizeIntH = parseInt( this.fontSize );
 		this.fontFamily = "monospace";
 
 		var oc = this.colors;
@@ -93,7 +117,7 @@ class KERNALMODULE {
 	init() {
 	}
 
-	initMode( config ) {
+	initMode( config, headerElementManager ) {
 
 			var sys = this.sys;
 			var msgs = sys.init.queuedMessages;
@@ -101,18 +125,46 @@ class KERNALMODULE {
 			this.cursorOn = false;
 			this.blinking = true;
 			this.reverse = false;
-			this.cursorMode = 1;
 
-			var tmp = config[0].split("x");
-			var w = parseInt( tmp[0] );
-			var h = parseInt( tmp[1] );
+			var w;
+			var h;
+			if( config[0].indexOf("x") > 0) {
+				var tmp = config[0].split("x");
+				w = parseInt( tmp[0] );
+				h = parseInt( tmp[1] );
+			}
+			else {
+				var ww = window.innerWidth;
+				var wh = window.innerHeight;
 
-			this.cols = Math.floor( w / this.fontSizeInt );
-			this.rows = Math.floor( h / this.fontSizeInt );
+				if( config[0].startsWith( "%%" )) {
+					var percentages = config[0].substr( 2 ).split(",");
+					var percentagex = percentages[0] / 100;
+					var percentagey = percentages[1] / 100;
+					w = Math.floor(ww * percentagex);
+					h = Math.floor(wh * percentagey);
+				}
+				else if( config[0].startsWith( "%" )) {
+					var percentage = config[0].substr( 1 );
+					percentage = percentage / 100;
+					w = Math.floor(ww * percentage);
+					h = Math.floor(wh * percentage);
+				}
+
+
+			}
+
+
+
+			this.cols = Math.floor( w / this.fontSizeIntW );
+			this.rows = Math.floor( h / this.fontSizeIntH );
 
 			/* adjust w,h to fit exactly so many cols and rows */
-			w = this.cols * this.fontSizeInt;
-			h = this.rows * this.fontSizeInt;
+			w = this.cols * this.fontSizeIntW;
+			h = this.rows * this.fontSizeIntH;
+
+			var fsw = this.fontSizeIntW;
+			var fsh = this.fontSizeIntH;
 
 			this.width = w;
 			this.height = h;
@@ -142,11 +194,11 @@ class KERNALMODULE {
 			this.cY = 0;
 			//this.cvs = this.outEl;
 
-			this.cvs2 = document.createElement("canvas");
+			this.cvs2 = document.createElement("canvas"); //only used for scrolling, really needed??
 			this.ctx2 = this.cvs2.getContext('2d');
 
-			this.cvs3 = document.createElement("canvas");
-			this.ctx3 = this.cvs3.getContext('2d');
+			this.cvsCursor = document.createElement("canvas");
+			this.ctxCursor = this.cvsCursor.getContext('2d');
 
 			this.cache = [];
 			this.updCtxImageData = { synched: false }
@@ -155,27 +207,32 @@ class KERNALMODULE {
 			this.cvs.height = h;
 			this.cvs2.width = w;
 			this.cvs2.height = h;
-
-			var fs = this.fontSizeInt;
-			this.cvs3.width = fs;
-			this.cvs3.height = fs;
+			this.cvsCursor.width = fsw;
+			this.cvsCursor.height = fsh;
 
 			this.offsets = [];
 
 			var ctx = this.ctx;
   		ctx.font =  this.fontSizeCSS + " " + this.fontFamily;
+			//ctx.font =  "20px Verdana";
  		  ctx.textBaseline = "bottom";
+			//ctx.fontStretch="expanded";
 
 			var str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890@+_!#%&/()=?*-:;,.'\"";
-			var fsid2 = this.fontSizeInt / 2;
+			var fsid2 = this.fontSizeIntW / 2;
 			for (const c of str) {
 				var tmp3 =  this.ctx.measureText( c )  ;
 				var tmp2 =  tmp3.width  ;
 				var tmp1 =  (tmp2 / 2) ;
 				var tmp0 =  fsid2 - tmp1 ;
 				var tmp = Math.floor( tmp0 );
+				if( tmp<0 ) { tmp = 0; }
 				this.offsets[ c ] = tmp;
  		 }
+
+		 	this.oIndicatorChar = "\u2595";
+		  this.oIndicatorSize = this.ctx.measureText( this.oIndicatorChar )  ;
+			this.oIndicatorOffset = Math.floor( fsid2 - (this.oIndicatorSize.width / 2));
 
 			this.cells = [];
 
@@ -203,8 +260,16 @@ class KERNALMODULE {
 			this.cvs.style.marginLeft = "auto";
 			this.cvs.style.marginRight = "auto";
 
+
 			this.outDiv0.appendChild( this.outDiv1 );
 			this.outDiv1.appendChild( this.center );
+			if( headerElementManager ) {
+				this.headerElementManager = headerElementManager;
+				this.center.appendChild( this.headerElementManager.get() );
+				this.headerElementManager.setDimensions( w, h );
+
+				this.headerElementManager.enable();
+			}
 			this.center.appendChild( this.cvs );
 
 
@@ -226,6 +291,23 @@ class KERNALMODULE {
 
 
 			 this.sys.log("CANVASCON Ready.");
+	}
+
+
+	notifyOnClick( handler, myFunction ) {
+
+		this.cvs.addEventListener( "click", function() {
+			handler[myFunction]();
+		} );
+
+	}
+
+	hideInner() {
+		this.cvs.hidden = true;
+	}
+
+showInner() {
+		this.cvs.hidden = false;
 	}
 
 	hide() {
@@ -262,14 +344,15 @@ class KERNALMODULE {
 			return;
 		}
 
-		var fs = this.fontSizeInt;
+		var fsw = this.fontSizeIntW;
+		var fsh = this.fontSizeIntH;
 
-		var x0 = (fs * this.x);
-		var y0 = fs * (this.y );
+		var x0 = (fsw * this.x);
+		var y0 = fsh * (this.y );
 
 		var ctx = this.ctx;
 
-		this.ctx.drawImage(this.cvs3, x0, y0);
+		this.ctx.drawImage(this.cvsCursor, x0, y0);
 
 		this.cursorOn = false;
 
@@ -309,21 +392,21 @@ class KERNALMODULE {
 
 		this.cursorOn = !this.cursorOn;
 
-		var fs = this.fontSizeInt;
+		var fsw = this.fontSizeIntW;
+		var fsh = this.fontSizeIntH;
 
-		var x0 = (fs * this.x);
-		var y0 = fs * (this.y );
+		var x0 = (fsw * this.x);
+		var y0 = (fsh * this.y);
 		var oc = this.colors;
 
 		var ctx = this.ctx;
 		var cell = this.cells[ this.y][this.x ];
 
+
 		if(  this.cursorOn ) {
 
-				//ctx.filter = 'contrast(1.4) sepia(1) drop-shadow(-9px 9px 3px #e81)';
-
 				/* first we backup underneath cursor */
-				this.ctx3.drawImage(this.cvs, x0, y0, fs, fs, 0, 0, fs, fs);
+				this.ctxCursor.drawImage(this.cvs, x0, y0, fsw, fsh, 0, 0, fsw, fsh);
 
 				/* we decide the colors */
 				var col = this.colors.fgHTML;
@@ -347,7 +430,7 @@ class KERNALMODULE {
 					index2 = cell.bg;
 				}
 
-				this.paintCursor( x0, y0, cell.txt, index, index2, this.cursorMode );
+				this.paintCursor( x0, y0, cell.txt, index, index2, this.cursorMode == "overwrite" );
 
 				return;
 
@@ -355,7 +438,7 @@ class KERNALMODULE {
 		else {
 
 			//cursor off
-			this.ctx.drawImage(this.cvs3, x0, y0);
+			this.ctx.drawImage(this.cvsCursor, x0, y0);
 
 		}
 
@@ -364,13 +447,18 @@ class KERNALMODULE {
 	_int_updateArea( srccells, x0, y0, x1, y1 ) {
 
 		var ctx = this.ctx;
-		var fs = this.fontSizeInt;
+		var fsw = this.fontSizeIntW;
+		var fsh = this.fontSizeIntH;
 		var oc = this.colors;
 
 		var x; var y;
 		try {
-		for( x=x0; x<=x1; x++) {
-			for( y=y0; y<=y1; y++) {
+
+		for( y=y0; y<=y1; y++) {
+			var yy = fsh * y;
+			var offX =x0 * fsw;
+			//for( x=x1; x>=x0; x--) {
+			for( x=x0; x<=x1; x++) {
 				var cell = this.cells[ y ][ x ];
 				var src = srccells[ y-y0 ][ x-x0 ];
 				var ch = src.txt;
@@ -385,8 +473,8 @@ class KERNALMODULE {
 				cell.fg = src.fg;
 				cell.bg = src.bg;
 
-
-				this.paintchar( fs * x , fs * y , ch );
+				this._int_paintchar( offX , yy , ch );
+				offX += fsw;
 			}
 		}
 	} catch ( e ) {
@@ -399,25 +487,52 @@ class KERNALMODULE {
 
 	paintCursor( x, y, ch , col1, col2, mode ) {
 		this._int_storeset_color( col2, col1 );
-		this.paintchar( x, y, ch );
+		this._int_paintchar( x, y, ch );
+		if(  mode ) {
+			this._int_drawIndicator( x, y, ch );
+		}
 		this._int_restore_color();
 	}
 
-	paintchar( x, y, ch ) {
+
+	_int_drawIndicator( x, y, c ) {
+
+		var ctx = this.ctx;
+
+		ctx.font =  this.fontSizeCSS + " " + this.fontFamily;
+		ctx.textBaseline = "top";
+
+		ctx.fillStyle = this.colors.fgHTML
+		ctx.fillRect(  x,y + (4*this.fontSizeIntH)/5, this.fontSizeIntW, (this.fontSizeIntH)/5 );
+
+	}
+
+	_int_paintchar( x, y, ch ) {
+
 			this.updCtxImageData.synched = false;
 
 			var oc = this.colors;
 			var index = ch + ":"+oc.bg+":"+oc.fg;
-			this.reverse
+			//this.reverse
 			var cacheel = this.cache[ index ];
-			var fs = this.fontSizeInt;
+			var fsw = this.fontSizeIntW;
+			var fsh = this.fontSizeIntH;
 
 			if( ! cacheel ) {
 
 				var cvs = document.createElement("canvas");
 				var ctx = cvs.getContext('2d', {alpha: false});
-				cvs.width = fs;
-				cvs.height = fs;
+
+				if( ch.charCodeAt(0) > 255 ) {
+					var tmp3 =  this.ctx.measureText( ch )  ;
+					var tmpw =  Math.floor( tmp3.width ) ;
+					if( tmpw > fsw ) {
+						fsw = tmpw;
+					}
+				}
+
+				cvs.width = fsw;
+				cvs.height = fsh;
 
 				ctx.font =  this.fontSizeCSS + " " + this.fontFamily;
 				ctx.textBaseline = "top";
@@ -428,26 +543,17 @@ class KERNALMODULE {
 				}
 
 				ctx.fillStyle = this.colors.bgHTML
-				ctx.fillRect(  0,0, fs, fs);
+				ctx.fillRect(  0,0, fsw, fsh);
 
 				ctx.fillStyle = this.colors.fgHTML;
 				ctx.fillText( ch , off, 0);
 
-				//TODO what about all reverse's
-
-				this.cache[ index ] = { ctx: ctx, cvs: cvs } ;
+				this.cache[ index ] = { ctx: ctx, cvs: cvs, w: fsw } ;
 				cacheel = this.cache[ index ];
 
 			}
 
-			if( ch != " " )  {
-				var tmp = 1;
-			}
-
-			//if( cacheel.cvs != null ) {
-					this.ctx.drawImage( cacheel.cvs, x, y);
-			//}
-
+			this.ctx.drawImage( cacheel.cvs, x, y );
 		}
 
 		op_gcolor( params ) {
@@ -485,92 +591,7 @@ class KERNALMODULE {
 
 		native( operation ) {
 
-
-
 			this[ "op_" + operation.action]( operation.params);
-		}
-
-		gfxUpdate__old( record ) {//see 152
-
-			var lineLen = 100 * 4;
-			var cellLen = 4;
-
-			var pixels = record.pixels;
-			var ctx = this.ctx;
-
-			var arrs = [];
-			var list = [];
-			var arrNo = -1;
-
-			var areasW = Math.ceil ( this.width / 100 );
-			var areasH = Math.ceil ( this.height /100 );
-
-			//console.log("Pixels to update " + pixels.length)
-			for( var i=0; i< pixels.length; i++) {
-				var p = pixels[ i ];
-
-				var areaNoX = Math.floor( p.x / 100 );
-				var areaNoY = Math.floor( p.y / 100 );
-				var areaKey = areaNoX + "_" + areaNoY;
-
-				var pdata;
-				var imd;
-
-				if( !arrs[ areaKey ] ) {
-					//
-
-					var x0 = areaNoX * 100;
-					var y0 = areaNoY * 100;
-					var x1 = x0 + 100 - 1;
-					var y1 = y0 + 100 - 1;
-					if( x1 > (this.width-1) ) {
-						x1 = this.width-1;
-					}
-					if( y1 > (this.height-1) ) {
-						y1 = this.height-1;
-					}
-
-					var w = 1+(x1-x0);
-					var h = 1+(y1-y0);
-
-					imd = ctx.getImageData( x0, y0, w, h );
-					pdata = imd.data;
-
-					var cache = { x: x0, y: y0, w: w, h: h, imd: imd, pdata: pdata };
-					arrs[ areaKey ] = cache;
-					list.push( cache );
-
-
-				}
-				else {
-					var cache = arrs[ areaKey ];
-					pdata = cache.pdata;
-					imd = cache.imd;
-
-				}
-
-				var xrel = p.x - (areaNoX * 100);
-				var yrel = p.y - (areaNoY * 100);
-
-				var offset = ( yrel * lineLen ) + xrel * cellLen;
-
-				var c = this.bmPalette[ p.c ];
-				pdata[offset+0] = c.r;
-				pdata[offset+1] = c.g;
-				pdata[offset+2] = c.b;
-
-			}
-
-
-			for( var i = 0; i<list.length; i++) {
-
-				var cache = list[ i ];
-				imd = cache.imd;
-				var x = cache.x;
-				var y = cache.y;
-				ctx.putImageData(imd, x, y);
-			}
-
 		}
 
 
@@ -629,6 +650,9 @@ class KERNALMODULE {
 
 			this.colors.bgHTML = this.palette[ p.bg ];
 			this.colors.fgHTML = this.palette[ 	p.fg ];
+			this.colors.bg = p.bg;
+			this.colors.fg = p.fg;
+			this.cursorMode = p.cursorMode;
 
 			for( var i=0; i< list.length; i++) {
 
@@ -659,6 +683,7 @@ class KERNALMODULE {
 			this.colors.fgHTML = this.palette[ 	p.fg];
 			this.colors.bg = p.bg;
 			this.colors.fg = p.fg;
+			this.cursorMode = p.cursorMode;
 
 			this._int_updateArea( srccells, 0,0, this.cols -1, this.rows -1 );
 
@@ -719,7 +744,8 @@ class KERNALMODULE {
 		cell = ch.txt;
 
 		var ctx = this.ctx;
-		var fs = this.fontSizeInt;
+		var fsw = this.fontSizeIntW;
+		var fsh = this.fontSizeIntH;
 
 		var off = 0;
 		if( this.offsets[ ch.txt ] ) {
@@ -727,10 +753,10 @@ class KERNALMODULE {
 		}
 
 		this.ctx.fillStyle = this.colors.bgHTML;
-		ctx.fillRect(  (fs * this.x) , fs * (this.y ), fs, fs);
+		ctx.fillRect(  (fsw * this.x) , fsh * (this.y ), fsw, fsh);
 
 		ctx.fillStyle = this.colors.fgHTML;
-		ctx.fillText( ch.txt , off + (fs * this.x) , fs * (this.y +1));
+		ctx.fillText( ch.txt , off + (fsw * this.x) , fsh * (this.y +1));
 
 		this.x++;
 		if( this.x >= this.cols ) {
@@ -793,15 +819,16 @@ class KERNALMODULE {
 			cell.txt = " ";
 		}
 
-		var fs = this.fontSizeInt;
+		var fsw = this.fontSizeIntW;
+		var fsh = this.fontSizeIntW;
 		this.ctx2.drawImage(this.cvs, 0, 0);
 		var w = this.cvs2.width;
-		var h = this.cvs2.height-fs;
+		var h = this.cvs2.height-fsh;
 
 		this.ctx.fillStyle = this.colors.bg;
 		this.ctx.fillRect(0, 0, this.cvs.width, this.cvs.height);
 
-		this.ctx.drawImage(this.cvs2, 0, fs, w, h-fs, 0, 0, w, h-fs );
+		this.ctx.drawImage(this.cvs2, 0, fsh, w, h-fsh, 0, 0, w, h-fsh );
 		//drawImage(image, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight)
 
 	}

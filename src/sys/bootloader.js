@@ -1,7 +1,10 @@
 const staticLoading = false;
 
 import  BootSys   from        './bootsys.js';
-var boot = new BootSys( staticLoading );
+import  BootCfg   from        './bootcfg.js';
+
+var bootCfg = new BootCfg(  );
+var boot = new BootSys( bootCfg,  staticLoading );
 var sys = boot.getSys();
 
 
@@ -161,14 +164,15 @@ function sysInit( stage ) {
       sys.init.displayMode = boot.displayMode;
       sys.init.queuedMessages = sys.nulcon;
 
-      sys.m.displaymodes.setMode( boot.displayMode );
-
-      var con = sys.m.displaymodes.getDriver();
-      boot.out = con;
-      sys.out =  con;
       sys.input = boot.m.domelinput;
       boot.input = boot.m.domelinput;
       sys.nulcon = undefined;
+      sys.fs =  sys.m.qfs;
+
+      sys.m.displaymodes.setMode( boot.displayMode, sys.m.basicmenu );
+      boot.out = sys.out;
+
+      sys.audio = sys.m.mrbeepaudio;
 
       var mods = Object.getOwnPropertyNames( boot.m );
       console.log(mods);
@@ -181,6 +185,8 @@ function sysInit( stage ) {
       console.log( "boot.basic=",boot.basic );
       boot.m.basic.setInput( boot.input );
       boot.m.basic.loadApp(  boot.onReady );
+
+
   }
 }
 
@@ -236,11 +242,6 @@ boot.nextFromSequence = function() {
   }
 }
 
-/*
-var taout = {
-  name: "TA-OUT Device", url: "taout.js",  destination: "taout"
-};
-*/
 
 var tablecon = {
   name: "TableCon Device", url: "tablecon.js",  destination: "tablecon"
@@ -259,27 +260,31 @@ var priv = {
 };
 
 var sfs = {
-  name: "SESSION Device", url: "sessionfs.js",  destination: "sfs"
+  name: "SESSION Device", url: "fs/sessionfs.js",  destination: "session"
 };
 
 var lfs = {
-  name: "LFS Device", url: "lfs.js",  destination: "lfs"
+  name: "LFS Device", url: "fs/lfs.js",  destination: "cache"
 };
 
 var ramfs = {
-  name: "RAMFS Device", url: "ramfs.js",  destination: "ramfs"
+  name: "RAMFS Device", url: "fs/ramfs.js",  destination: "ram"
 };
 
 var scripturl = {
-  name: "SCRIPTURL Device", url: "scripturl.js",  destination: "script"
+  name: "SCRIPTURL Device", url: "fs/scripturl.js",  destination: "script"
 };
 
 var transferfs = {
-  name: "TRANSFER Device", url: "transferfs.js",  destination: "transfer"
+  name: "TRANSFER Device", url: "fs/transferfs.js",  destination: "export"
+};
+
+var sitefs = {
+  name: "SITE Device", url: "fs/http/sitefs.js",  destination: "site"
 };
 
 var qfs = {
-  name: "QFS Device", url: "qfs.js",  destination: "qfs", dependencies: [ "ramfs", "lfs", "sfs", "script", "transfer" ]
+  name: "QFS Device", url: "fs/qfs.js",  destination: "qfs", dependencies: [ "ram", "cache", "session", "script", "export", "site" ]
 };
 
 var mutedinput = {
@@ -302,13 +307,23 @@ var apps = {
   name: "App Handler", url: "apps/apps.js",  destination: "apps"
 }
 
-var basicapps = {
-  name: "BASIC App Handler", url: "basic/apps.js",  destination: "basic"
+var audio = {
+  name: "MR.Beep Audio Handler", url: "mrbeep/module.js",  destination: "mrbeepaudio"
 }
+
+var basicapps = {
+  name: "BASIC App Handler", url: "basic/module.js",  destination: "basic"
+}
+
+
+var basicmenu = {
+  name: "BASIC Menu Handler", url: "basicmenu/module.js",  destination: "basicmenu"
+}
+
 
 boot.sequence = [
     displaymodes,
-    //taout,
+    basicmenu,
     tablecon,
     canvas,
     simplewarning,
@@ -320,9 +335,12 @@ boot.sequence = [
     ramfs,
     transferfs,
     scripturl,
-    qfs,//
+    sitefs,
+    qfs,
+    audio,
     htmlwrapper,
     basicapps
+
   ];
 
 var basic = {};

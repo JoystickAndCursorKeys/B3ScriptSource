@@ -8,6 +8,28 @@ class ErrorHandler {
     throw this.newError( clazz, detail, context, lineNr );
   }
 
+
+  fromSimpleExternalError( s, context, lineNr0 ) {
+
+    var lineNr = lineNr0;
+    if( lineNr === undefined ) {
+      lineNr = -1;
+    }
+
+    var parts = s.split(":");
+    if( !parts.length == 3) {
+      return undefined;
+    }
+
+    var err = this.newError( parts[2], parts[3], context, lineNr );
+
+    err.extCode0 = parts[0];
+    err.extCode1 = parts[1];
+
+    return err;
+
+  }
+
   fromSerializedError( s, context, lineNr0 ) {
 
     var lineNr = lineNr0;

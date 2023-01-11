@@ -13,14 +13,19 @@ class  BasicArray {
 
   _check( indices ) {
     if( indices.length != this.indices.length ) {
-      throw "00:index dimension mismatch for array " + this.name;
+      throw "BasicArray:00:index dimension mismatch:For array " + this.name;
     }
     for( var i=0; i<indices.length; i++) {
       if ( indices[i] > this.indices[ i ]) {
-        throw "01:index " + indices[i] + " out of bounds for array " + this.name + " for index " + i;
+        var detail = "\"" + this.name + "[" + indices[i] + "]"+"\" does not exist";
+        if( indices.length > 1) {
+          detail = "\"" + this.name + "\" with index " + indices[i] + " does not exist";
+          detail += " for index dimension " + i;
+        }
+        throw "BasicArray:01:index out of bounds:" + detail;
       }
       else if ( indices[i] < 0) {
-        throw "02:index smaller then zero for array " + this.name;
+        throw "BasicArray:02:index smaller then zero:For array " + this.name;
       }
 
     }
