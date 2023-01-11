@@ -704,7 +704,7 @@ showInner() {
 			}
 		}
 
-		this.ctx.fillStyle = this.colors.bg;
+		this.ctx.fillStyle = this.colors.bgHTML;
 		this.ctx.fillRect(0, 0, this.cvs.width, this.cvs.height);
 		this.x = 0;
 		this.y = 0;

@@ -102,7 +102,7 @@ class FILESYSMODULE {
   getDir( path, defaultMatcherFunction ) {
 
     if( !this.initialized ) {
-      return getEmptyDirStructure(null);
+      return this.getEmptyDirStructure(null);
     }
 
     var storageName =  this.prefix + "" + this.currentDisk + "_dir";
