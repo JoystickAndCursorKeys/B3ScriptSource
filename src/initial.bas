@@ -9,5 +9,5 @@
 52 ch$ = cw;"x";ch
 60 center "*** Text: ";txt$;", Chars: "; ch$ ;", Gfx: ";width();"x";height();"***"
 65 print
-70 center "*** (c)2023 Cursor Keys ***"
+70 center "*** (c)2023 Cursor Keys, CTRL-Backspace for Menu ***"
 75 print: print
