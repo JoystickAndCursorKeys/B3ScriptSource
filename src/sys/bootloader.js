@@ -130,9 +130,6 @@ boot.loadScript = (name, url0, loadedHandler, destination, dependencies ) => {
 
       return;
      }
-
-
-
    })
    .catch( err => {
       if( err == "HALT" ) { return; }
@@ -186,14 +183,8 @@ function sysInit( stage ) {
       boot.m.basic.setInput( boot.input );
       boot.m.basic.loadApp(  boot.onReady );
 
-
   }
 }
-
-
-
-
-
 
 
 boot.nextFromSequence = function() {

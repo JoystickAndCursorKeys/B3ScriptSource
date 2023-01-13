@@ -43,6 +43,7 @@ boot.i.cache = lfs;
 boot.i.ramfs = ramfs;
 boot.i.script = scripturl;
 boot.i.qfs = qfs;
+boot.dep.basicmenu = [ "domelinput" ];
 boot.dep.qfs = [ "ramfs", "cache", "sfs", "script" ];
 boot.dep.basic = [ "canvas", "tablecon", "displaymodes", "mrbeepaudio", "qfs", "htmlwrapper", "basicmenu" ];
 
@@ -105,7 +106,8 @@ sys.init.queuedMessages = sys.nulcon;
 sys.init.conStyle = boot.conStyle;
 sys.init.displayMode = boot.displayMode;
 sys.m = boot.m;
-sys.fs =  sys.m.qfs;
+sys.fs =  boot.m.qfs;
+sys.input = boot.m.domelinput;
 sys.m.displaymodes.setMode( boot.displayMode, sys.m.basicmenu );
 boot.out = sys.out;
 

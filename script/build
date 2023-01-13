@@ -3,6 +3,7 @@ mkdir dist
 rm -Rf dist/static
 mkdir dist/static
 cp src/index_static.html dist/static/index.html
+cp -R examples dist/static/examples
 cp src/icon.png dist/static/icon.png
 
 #rm -Rf dist/static_embed

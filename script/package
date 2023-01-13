@@ -1,0 +1,5 @@
+version=`cat version.ver`
+target=B3_${version}
+cp  -R dist/static dist/$target
+rm dist/$target/*.map
+zip -r dist/${target}.zip dist/$target
