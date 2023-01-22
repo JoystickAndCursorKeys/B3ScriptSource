@@ -32,7 +32,7 @@
 1061 IF KEY$="s" THEN gosub selectchar:  color 1,guibg,10: cls : gosub drawpic : gosub drawcursor : gosub updatedash
 1062 IF KEY$="c" THEN ctype$="fg" : gosub selectcolor:  color 1,guibg,10: cls : gosub drawpic : gosub drawcursor: gosub updatedash
 1063 IF KEY$="b" THEN ctype$="bg" : gosub selectcolor:  color 1,guibg,10: cls : gosub drawpic : gosub drawcursor: gosub updatedash
-1064 IF KEY$="i" THEN tmp=dbgc: dbgc=dcol: dcol=tmp: gosub updatedash
+1064 IF KEY$="i" THEN tmp=pic(cx,cy,1): pic(cx,cy,1) = pic(cx,cy,2): pic(cx,cy,2) = tmp: gosub drawpic: gosub drawcursor
 1065 IF KEY$="m" THEN gosub nextmode : gosub updatedash
 1066 IF KEY$="x" THEN gosub export2clip
 1067 IF KEY$="l" THEN gosub loadpic : gosub drawpic
