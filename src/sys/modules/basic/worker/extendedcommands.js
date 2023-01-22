@@ -160,7 +160,7 @@ class ExtendedCommands {
     return [RAW];
   }
 
-  _stat_info_cls() { return "general:Clears the screen:[<Reset Screen Flag>]"; }
+  _stat_info_cls() { return "general:Clears the screen:[<ResetScreenFlag>]"; }
 
   _stat_cls( pars ) {
     var reset = false;
@@ -188,7 +188,7 @@ class ExtendedCommands {
     }
   }
 
-  _stat_info_reset() { return "general:Resets the audio and the terminal:[ mode (0=screen, 1=audio, 2=all) ]"; }
+  _stat_info_reset() { return "general:Resets the audio and the terminal:[ <Mode> (0=screen, 1=audio, 2=all) ]"; }
   _stat_reset( pars ) {
 
     if( pars.length == 0 ) {
@@ -229,7 +229,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_reverse() { return "print:Reverse the print output:reverse-flag"; }
+  _stat_info_reverse() { return "print:Reverse the print output:<ReverseFlag>"; }
 
   _stat_reverse( pars ) {
 
@@ -246,10 +246,7 @@ class ExtendedCommands {
     this.output.control( 64 + reverse );
   }
 
-
-
-
-  _stat_info_beep() { return "sound:Make a short sound:channel,frequency,length"; }
+  _stat_info_beep() { return "sound:Make a short sound:<Channel>,<Frequency>,<Length>"; }
   _stat_beep( pars ) {
 
 
@@ -270,7 +267,7 @@ class ExtendedCommands {
 
 
 
-  _stat_info_sound() { return "sound:Make a pre defined sound:channel,frequency,length"; }
+  _stat_info_sound() { return "sound:Make a pre defined sound:<Channel>,<Frequency>,<Length>"; }
   _stat_sound( pars ) {
 
     if( pars.length == 0 ) {
@@ -289,7 +286,7 @@ class ExtendedCommands {
   }
 
 
-  _stat_info_setadr() { return "sound:Define Attach,Decay and Release:channel, attackT, decayT, releaseT"; }
+  _stat_info_setadr() { return "sound:Define Attach,Decay and Release:<Channel>, <AttackT>, <decayT>, <releaseT>"; }
   _stat_setadr( pars ) {
 
 
@@ -307,7 +304,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_volume() { return "sound:Change the audio volume:volume"; }
+  _stat_info_volume() { return "sound:Change the audio volume:<Volume>"; }
   _stat_volume( pars ) {
 
     if( pars.length != 1) {
@@ -319,7 +316,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_chfreq() { return "sound:Change the channel audio frequency:channel, frequency"; }
+  _stat_info_chfreq() { return "sound:Change the channel audio frequency:<Channel, Frequency>"; }
   _stat_chfreq( pars ) {
 
     if( pars.length != 2) {
@@ -331,7 +328,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_chvolume() { return "sound:Change the channel audio volume:channel, volume"; }
+  _stat_info_chvolume() { return "sound:Change the channel audio volume:<Channel>, <Volume>"; }
   _stat_chvolume( pars ) {
 
     if( pars.length != 2) {
@@ -343,7 +340,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_chsvolume() { return "sound:Change the channel sustain volume:channel, volume"; }
+  _stat_info_chsvolume() { return "sound:Change the channel sustain volume:<Channel>, <Volume>"; }
   _stat_chsvolume( pars ) {
 
     if( pars.length != 2) {
@@ -355,7 +352,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_addfx() { return "sound:Add a Sound FX part to the channel:channel, type, value, time"; }
+  _stat_info_addfx() { return "sound:Add a Sound FX part to the channel:<Channel>, <Type>, <Value>, <Time>"; }
   _stat_addfx( pars ) {
 
     if( pars.length != 4) {
@@ -372,7 +369,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_clearfx() { return "sound:Clear a sound effect:channel"; }
+  _stat_info_clearfx() { return "sound:Clear a sound effect:<Channel>"; }
   _stat_clearfx( pars ) {
 
     if( pars.length != 1) {
@@ -384,11 +381,11 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_playfx() { return "sound:Change the channel sustain volume:channel [,frequency ]"; }
+  _stat_info_playfx() { return "sound:Change the channel sustain volume:<Channel> [,<Frequency> ]"; }
   _stat_playfx( pars ) {
 
     if( pars.length < 1 || pars.length >2 ) {
-      this.erh.throwError( "parameter count", "expected channel [,frequency ]" );
+      this.erh.throwError( "parameter count", "expected <Channel> [,<Frequency> ]" );
       return
     }
 
@@ -465,7 +462,7 @@ class ExtendedCommands {
 
 
 
-  _stat_info_origin() { return "graphics:Specify origin of graphics console:<x0>,<y0>,<dx>,<dy>"; }
+  _stat_info_origin() { return "graphics:Specify origin of graphics console:<X0>,<Y0>,<Dx>,<Dy>"; }
   _stat_origin( pars ) {
     if( pars.length != 4 ) {
       this.erh.throwError( "parameter count", "expected 4 (x0,y0,dx,dy), not " + pars.length );
@@ -496,7 +493,7 @@ class ExtendedCommands {
     );
   }
 
-  _stat_info_line() { return "graphics:Draw a line:<x0>,<y0>,<x1>,<y1>"; }
+  _stat_info_line() { return "graphics:Draw a line:<X0>,<Y0>,<X1>,<Y1>"; }
   _stat_line( pars ) {
     if( pars.length != 4 ) {
       this.erh.throwError( "parameter count", "expected 2 (x0,y0,y1,y1), not " + pars.length );
@@ -517,7 +514,7 @@ class ExtendedCommands {
     );
   }
 
-  _stat_info_plot() { return "graphics:Plot a pixel:<x0>,<y0>,<x1>,<y1>"; }
+  _stat_info_plot() { return "graphics:Plot a pixel:<X0>,<Y0>,<X1>,<Y1>"; }
   _stat_plot( pars ) {
     if( pars.length != 2 ) {
       this.erh.throwError( "parameter count", "expected 2 (x,y), not " + pars.length );
@@ -532,7 +529,7 @@ class ExtendedCommands {
     this.bitmap.plot( pars[0].value, pars[1].value );
   }
 
-  _stat_info_center() { return "print:Print horizontal center:<String to Print>"; }
+  _stat_info_center() { return "print:Print horizontal center:<StringToPrint>"; }
   _stat_center( pars ) {
 
     var string;
@@ -552,7 +549,7 @@ class ExtendedCommands {
   }
 
 
-  _stat_info_gtext() { return "graphics:Write text at position x,y:X,Y,TEXT"; }
+  _stat_info_gtext() { return "experimental:Write text at position x,y:<X>,<Y>,<Text>"; }
   _stat_gtext( pars ) {
 
     var string;
@@ -767,7 +764,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_color() { return "print:Sets the console color index:<Pen Color>[, <Paper Color>\n[, <Border Color>]]"; }
+  _stat_info_color() { return "print:Sets the console color index:<PenColor>[, <PaperColor>\n[, <BorderColor>]]"; }
   _stat_color( pars ) {
 
     var result;
@@ -795,7 +792,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_display() { return "general:Set the console display mode:<Display Mode Number>"; }
+  _stat_info_display() { return "general:Set the console display mode:<DisplayModeNumber>"; }
   _stat_display( pars ) {
 
     var result;
@@ -833,7 +830,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_border() { return "general:Changes the border color:<Color Index>"; }
+  _stat_info_border() { return "general:Changes the border color:<ColorIndex>"; }
   _stat_border( pars ) {
 
     var result;
@@ -873,6 +870,18 @@ class ExtendedCommands {
   }
 
 
+  _stat_info_txtcopy() { return "experimental:Copy data to clipboard:<StringData$>"; }
+  _stat_txtcopy( pars ) {
+    if( pars.length != 1) {
+        this.erh.throwError( "parameter count", "dcopy needs 1 parameter" );
+    }
+
+    this.sys.export( pars[0].value + "", "clipboard" );
+
+  }
+
+
+
   _fun_info_peekcl() { return "poke:Get color information directly from from screen buffer:<Y>,<X>[,<Mode]"; }
   _fun_peekcl( pars ) {
 
@@ -905,7 +914,7 @@ class ExtendedCommands {
   }
 
 
-  _fun_info_ucbase() { return "string:Return unicode-set base character code:<UC-Setname$>"; }
+  _fun_info_ucbase() { return "string:Return unicode-set base character code:<SetName$>"; }
   _fun_ucbase( pars ) {
 
     if( pars.length != 1 ) {

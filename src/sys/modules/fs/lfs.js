@@ -7,6 +7,7 @@ class FILESYSMODULE {
     this.initialized = false;
     this.sys = sys;
     this.prefix = sys.SIG + "_" + sys.SUBSYS + "__" ;
+    this.deviceId = 5;
 
     console.log( "FILESYSMODULE lfs: " + this.prefix );
 

@@ -15,11 +15,16 @@ class Editor {
 
   keyHandlerForCLE( e ) {
 
-      if( e.keyLabel == "Enter" ) {
+      if( e.keyLabel == "Enter"  && !e.shiftKey ) {
         var command = sys.out.getCurrentLine();
         this.output.writeln("");
 
         this.runTime.executeInteractiveLine( command );
+
+      }
+      else if( e.keyLabel == "Enter" && e.shiftKey ) {
+
+        this.output.ScrollDownByCurrentLine();
 
       }
       else if( e.keyLabel == "Backspace" ||

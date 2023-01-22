@@ -239,7 +239,7 @@ var tablecon = {
 };
 
 var canvas = {
-  name: "Canvas Device", url: "canvas.js",  destination: "canvas"
+  name: "Canvas Device", url: "canvas/module.js",  destination: "canvas"
 };
 
 var simplewarning = {

@@ -1,0 +1,20 @@
+0 color 1,0,10 : cls : cc = 1 : bg = 0
+1 color 5: print "c for color, b for background, s for switch bg/fg colors"
+5 color 1: x=0: xc=0: y=0 : locate 2,0: print 256
+10 for c = 0 to 255
+11 if x>15 then x=0: xc=0:y=y+1: locate 2+y,0: print (c+256)
+15 pokec xc+5,y+2,256+c
+20 x=x+1: xc=xc + 1
+25 if xc % 4 = 0 then xc=xc+8: locate 2+y,xc-1: print (c+1+256)
+30 next
+40 locate 4+y,0 : print "          " : locate 4+y,0 : input t$
+45 locate 5+y,0 : print "          " : locate 5+y,0 : input u$
+56 if u$ = "" then u$ = t$
+57 if t$ = "c" then cc= val( u$ ) : goto 40
+58 if t$ = "b" then bg= val( u$ ) : goto 40
+59 if t$ = "i" then tmp=bg: bg= cc: cc=tmp : goto 40
+61 for xx = 1 to 24 step 2: for yy = 1 to 16
+65 pokeccl xx+5,yy+y+6, val( t$ ), cc, bg
+66 pokeccl xx+6,yy+y+6, val( u$ ), cc, bg
+70 next: next
+80 goto 40

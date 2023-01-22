@@ -511,10 +511,11 @@ class KERNALMODULE {
 
   deleteFile( worker, m ) {
     var sys = this.sys;
+    var path = this.devicePath( m.device, m.path );
 
     try {
       sys.log("BSYS:","delete", m.path );
-      sys.m.qfs.deleteFile( m.path,
+      sys.m.qfs.deleteFile( path,
         { clazz: this, method: "deletedFile", path: m.path, processId: m.processId })
 
     }
@@ -566,10 +567,11 @@ class KERNALMODULE {
 
   saveProgram( worker, m ) {
       var sys = this.sys;
+      var path = this.devicePath( m.device, m.path );
 
       try {
         sys.log("BSYS:","Load", m.path );
-        sys.m.qfs.saveFile( m.path, m.data,
+        sys.m.qfs.saveFile( path, m.data,
           { clazz: this, method: "savedProgram", processId: m.processId })
 
       }
@@ -651,14 +653,33 @@ class KERNALMODULE {
     }
   }
 
+  devicePath( dev, path ) {
+
+    var sys = this.sys;
+
+    if( dev > -1 ) {
+      var fs = sys.m.qfs.getFS( dev );
+      if(!fs) {
+        throw "No such device";
+      }
+
+      var parts = path.split("://");
+      if( parts.length >1 ) {
+        throw "Double device indicators";
+      }
+      return fs.prefix + path;
+    }
+    return path;
+  }
 
   loadAppFromProgram( worker, m ) {
 
     var sys = this.sys;
-
+    var path = this.devicePath( m.device, m.path );
     try {
       sys.log("BSYS:","Load", m.path );
-      sys.m.qfs.loadFile( m.path, { clazz: this, method: "loadedAppFromProgram", processId: m.processId } );
+
+      sys.m.qfs.loadFile( path, { clazz: this, method: "loadedAppFromProgram", processId: m.processId } );
     }
     catch ( e ) {
       console.log ( e )
@@ -803,25 +824,44 @@ class KERNALMODULE {
       );
   }
 
-  dir( path, m ) {
+  dir( path0, m ) {
 
-    var list = this.sys.fs.getDir( path );
+    try {
+      var path = this.devicePath( m.device, path0 );
+      var list = this.sys.fs.getDir( path );
 
 
-    this.worker.postMessage(
-      {
-      type: "message",
-      processId: m.processId,
-      message: "dir:completed",
-      messageObject:
+      this.worker.postMessage(
         {
-          files: list.files,
-          title: list.title,
-          free: list.free,
-          fs: list.fs
+        type: "message",
+        processId: m.processId,
+        message: "dir:completed",
+        messageObject:
+          {
+            files: list.files,
+            title: list.title,
+            free: list.free,
+            fs: list.fs
+          }
         }
+        );
       }
-      );
+      catch ( e ) {
+        console.log ( e )
+
+        this.worker.postMessage(
+          {
+          type: "message",
+          processId: m.processId,
+          message: "dir:error",
+          messageObject:
+            {
+              reason: e.message
+            }
+          }
+          );
+
+      }
   }
 
   setInput( input ) {

@@ -9,6 +9,7 @@ class FILESYSMODULE {
     this.files = [];
     this.data  = {};
 
+    this.deviceId = 7;
   }
 
   init() {}
@@ -89,13 +90,27 @@ class FILESYSMODULE {
 
   }
 
+
+  makeDataContainer( data ) {
+    return {
+      success: true,
+      data: data
+    }
+  }
+
+
   loadFile( fileName, cbRec ) {
 
     if( ! this.exists( fileName ) ) {
       throw makeError("File not found");
     }
 
-    cbRec.clazz[ cbRec.method ]( fileName, cbRec, this.data[ fileName ].data );
+    var response =
+      this.makeDataContainer(
+        this.data[ fileName ].data
+      );
+
+    cbRec.clazz[ cbRec.method ]( fileName, cbRec, response );
 
     //return this.data[ fileName ];
 
@@ -103,21 +118,22 @@ class FILESYSMODULE {
 
   deleteFile( fileName ) {
 
-    if( ! this.existsFile( fileName ) ) {
+    if( ! this.exists( fileName ) ) {
       return false;
     }
 
     try {
       var files = this.files;
+      var files2 = [];
 
       for( var i=0; i<files.length; i++) {
-        if( files[i].fname == fileName ) {
-          files[ i ] = undefined;
-          break;
+        if( files[i].fname != fileName ) {
+          files2.push( files[i] );
         }
       }
 
       this.data[ fileName ] = undefined;
+      this.files = files2;
     }
     catch ( e ) {
       throw {

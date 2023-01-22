@@ -8,6 +8,7 @@ class FILESYSMODULE {
 
     this.files = [];
     this.data  = {};
+    this.deviceId = 1;
 
   }
 

@@ -37,7 +37,8 @@ class FILESYSMODULE {
         var fs = {
           token: fsToken,
           fs: this.sys.m[ fsToken ],
-          prefix: fsToken + "://"
+          prefix: fsToken + "://",
+          device: this.sys.m[ fsToken ].deviceId
         }
         this.fsList.push( fs );
     }
@@ -66,7 +67,24 @@ class FILESYSMODULE {
     return this.currentFS;
   }
 
+  getFSByDevId(deviceId) {
+
+      var fsList = this.fsList;
+
+      for( var i=0; i< fsList.length; i++) {
+          var fs = fsList[i];
+          if( fs.device == deviceId ) {
+            return fs;
+          }
+      }
+      return null;
+  }
+
   checkFS( qpath0 ) {
+
+    if( (typeof qpath0 ).toLowerCase() == "number" ) {
+        return this.getFSByDevId(qpath0);
+    }
 
     var qpath = qpath0;
     var fsList = this.fsList;
@@ -86,7 +104,9 @@ class FILESYSMODULE {
 
   setFS( path ) {
 
-    var fs = this.checkFS(path);
+    var fs;
+
+    fs = this.checkFS(path);
 
     if( ! fs ) {
       return false;
@@ -100,9 +120,15 @@ class FILESYSMODULE {
     var fsList = this.fsList;
 
     for( var i=0; i< fsList.length; i++) {
-        var fs = fsList[i];
-        list.push( fs.prefix );
+        var fs = fsList[ i ];
+        list.push( {
+          name: fs.prefix,
+          device: fs.device
+
+        } ) ;
     }
+
+    list.sort((a, b) => (a.device > b.device) ? 1 : -1)
 
     return list;
   }
@@ -112,6 +138,10 @@ class FILESYSMODULE {
   }
 
   getFS( qpath ) {
+
+    if( (typeof qpath ).toLowerCase() == "number" ) {
+        return this.getFSByDevId(qpath);
+    }
 
     var fsList = this.fsList;
 
@@ -131,12 +161,15 @@ class FILESYSMODULE {
         }
     }
 
-    this.currentFS
+    //this.currentFS
 
     return null;
   }
 
   getLPath( qpath ) {
+    if( (typeof qpath ).toLowerCase() == "number" ) {
+      return "";
+    }
     var parts = qpath.split("://");
     if( parts.length <2 ) { return qpath; }
     return parts[ 1 ];
@@ -206,13 +239,14 @@ class FILESYSMODULE {
   }
 
   saveFile(
-      /*mandatory*/ qpath, data, callRecord,
+      /*mandatory*/ qpath0, data, callRecord,
       /*optional*/ type, length ) {
 
     if( !this.initialized ) {
       return null;
     }
 
+    var qpath = qpath0.toLowerCase();
 
     var fsRecord = this.getFS( qpath );
     if( !fsRecord ) {
@@ -254,7 +288,9 @@ class FILESYSMODULE {
   }
 
 
-  loadFile( qpath , callRecord  ) {
+  loadFile( qpath0 , callRecord  ) {
+
+    var qpath = qpath0.toLowerCase();
 
     var cbRec = callRecord;
     var makeError = this.makeError;
@@ -324,11 +360,13 @@ class FILESYSMODULE {
     loadedFile( path, cb, data )
   */
 
-  deleteFile( qpath, callRecord ) {
+  deleteFile( qpath0, callRecord ) {
 
     if( !this.initialized ) {
       return null;
     }
+
+    var qpath = qpath0.toLowerCase();
 
     var fsRecord = this.getFS( qpath );
     if( !fsRecord ) {
@@ -366,8 +404,6 @@ class FILESYSMODULE {
     return "error";
 
   }
-
-
 }
 
 export { FILESYSMODULE as default};

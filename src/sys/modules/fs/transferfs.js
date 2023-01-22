@@ -6,6 +6,8 @@ class FILESYSMODULE {
     }
     this.sys = sys;
     this.domCtr = this.sys.domContainer;
+
+    this.deviceId = 10;
   }
 
   init() {
@@ -21,7 +23,7 @@ class FILESYSMODULE {
     return {
       success: false,
       reason: reason,
-      details: details,
+      message: details,
       fsErrorSignature: true,
     }
   }
@@ -31,7 +33,8 @@ class FILESYSMODULE {
   }
 
   getDir() {
-    return [];
+    throw this.makeError( "getDir", "Not Supported");
+
   }
 
   exists( fileName ) {

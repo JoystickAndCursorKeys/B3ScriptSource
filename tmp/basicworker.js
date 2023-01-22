@@ -59,9 +59,9 @@ function init_sys() {
 
   }
 
-  sys.load = function( rt, path ) {
+  sys.load = function( rt, path, device ) {
 
-      post("load", { processId: rt.processId, path:path } );
+      post("load", { processId: rt.processId, path:path, device: device } );
 
   }
 
@@ -71,21 +71,21 @@ function init_sys() {
 
   }
 
-  sys.save = function( rt, path, data ) {
+  sys.save = function( rt, path, device, data ) {
 
-      post("save", { processId: rt.processId, path:path, data: data } );
-
-  }
-
-  sys.delete = function( rt, path ) {
-
-      post("delete", { processId: rt.processId, path:path } );
+      post("save", { processId: rt.processId, path:path, device: device , data: data } );
 
   }
 
-  sys.dir = function( rt, path ) {
+  sys.delete = function( rt, path, device ) {
 
-      post("dir", { processId: rt.processId, path:path } );
+      post("delete", { processId: rt.processId, path:path, device: device  } );
+
+  }
+
+  sys.dir = function( rt, path, device ) {
+
+      post("dir", { processId: rt.processId, path:path, device: device } );
 
   }
 
@@ -685,11 +685,16 @@ class Editor {
 
   keyHandlerForCLE( e ) {
 
-      if( e.keyLabel == "Enter" ) {
+      if( e.keyLabel == "Enter"  && !e.shiftKey ) {
         var command = sys.out.getCurrentLine();
         this.output.writeln("");
 
         this.runTime.executeInteractiveLine( command );
+
+      }
+      else if( e.keyLabel == "Enter" && e.shiftKey ) {
+
+        this.output.ScrollDownByCurrentLine();
 
       }
       else if( e.keyLabel == "Backspace" ||
@@ -1030,8 +1035,8 @@ class BasicRuntime {
     }
   }
 
-  dir( path ) {
-    this.sys.dir( this, path );
+  dir( path, device ) {
+    this.sys.dir( this, path, device );
     this.startWaitForMessage( "dir" )
   }
 
@@ -1045,8 +1050,8 @@ class BasicRuntime {
     this.startWaitForMessage( "path" )
   }
 
-  load( path, start ) {
-    this.sys.load( this, path );
+  load( path, start, device ) {
+    this.sys.load( this, path, device );
     this.startWaitForMessage( "load" )
     this.autoStartAfterLoad = start;
 
@@ -1058,20 +1063,20 @@ class BasicRuntime {
 
   }
 
-  save( path0 ) {
+  save( path0, device ) {
 
     var data = this.getProgramAsText();
     var path = path0;
     if( path0 == null ) {
       path = "default.bas";
     }
-    this.sys.save( this, path, data );
+    this.sys.save( this, path, device, data );
     this.startWaitForMessage( "save" )
   }
 
-  deleteFile( path ) {
+  deleteFile( path, device ) {
 
-    this.sys.delete( this, path );
+    this.sys.delete( this, path, device );
     this.startWaitForMessage( "delete" )
   }
 
@@ -1194,6 +1199,7 @@ class BasicRuntime {
     else if( _message == "loaddata:completed" ) {
 
       sys.log("Received 'loaddata:completed' message. Loaded " + _data.data.length + " bytes.." );
+
       this.insertData( _data.data, _data.type, _data.label  );
 
     }
@@ -1245,14 +1251,31 @@ class BasicRuntime {
       this.enterListMode( list );
 
     }
+    else if( _message == "dir:error" ) {
+
+      sys.log("Received 'dir:error' message. Error " + _data.reason );
+
+      this.printError("dir", false, undefined, _data.reason );
+      this.stop();
+    }
     else if( _message == "listfs:completed" ) {
 
       sys.log("Received 'listfs:completed' message." );
 
       var list = ["", "Default Filesystem: \"" + _data.currentFs + "\"", "", "Devices:", "" ];
 
+      //var fs = fsList[i];
+
+
       for( var i=0; i<_data.fs.length; i++) {
-          list.push("    \"" + _data.fs[i] + "\"");
+
+          var fs = _data.fs[i];
+          var str = "\"" + fs.name + "\"";
+          var deviceNumberLen = (fs.device + "").length;
+          str = str + "                  ".substr( 0,(18-str.length-deviceNumberLen) ) + fs.device;
+
+
+          list.push("     " + str );
       }
 
       list.push( "" );
@@ -1313,6 +1336,7 @@ class BasicRuntime {
         this.output.writeln("");
 
         this.handleLineInput( string, true );
+
       }
       else if( e.keyLabel == "Backspace" ||
               e.keyLabel == "Delete"  ) {
@@ -1445,6 +1469,7 @@ class BasicRuntime {
     this.list = list;
     this.listPointer = 0;
     this.printLine("");
+    this.listFlagBakInteractive = this.input.getInterActive();
     this.input.setInterActive( false );
     this.flagStatusChange();
   }
@@ -2177,49 +2202,22 @@ class BasicRuntime {
 
     var l = this.program[ this.runPointer ];
     var cmds = l[1];
-    //console.log(cmds);
 
-
-    if( this.runPointer > -1 ) {
-
-        var l=this.program[this.runPointer];
-        //console.log( l[0] + "after input >>(" + this.runPointer + ":"  + this.runPointer2 +")");
-    }
+    this.input.setInterActive( false);
 
     this.runPointer2++;
 
-    if( this.runPointer > -1 ) {
-
-        var l=this.program[this.runPointer];
-        //console.log( l[0] + "after input >>>(" + this.runPointer + ":"  + this.runPointer2 +")");
-    }
-
     if( this.runPointer2 >=  cmds.length ) {
-
 
       this.runPointer2 = 0;
       this.runPointer++;
 
-      if( this.runPointer > -1 ) {
-
-          var l=this.program[this.runPointer];
-          //console.log( l[0] + "after input >>>>(" + this.runPointer + ":"  + this.runPointer2 +")");
-      }
-
-      this.sys.blinkMode( false  );
-
       if( this.runPointer >=  p.length ) {
-
-        if( this.runPointer > -1 ) {
-
-            var l=this.program[this.runPointer];
-            //console.log( l[0] + "after input >>>>>(" + this.runPointer + ":"  + this.runPointer2 +")");
-        }
 
         this.runFlag = false;
 
         this.HandleStopped( false );
-        //con.clearCursor();
+
         this.printLine("");
         this.printReady();
 
@@ -2415,8 +2413,15 @@ class BasicRuntime {
       this.setVar("LINE", lineNumber );
 
 
+      if( this.erh.isError( e ) ) {
+        var err = e;
 
-      if( this.erh.isSerializedError( e ) ) {
+        this.setVar("ERR", err.clazz );
+        this.setVar("ERRDETAIL", err.detail  );
+
+        this.printError( err.clazz, undefined, undefined, err.detail );
+      }
+      else if( this.erh.isSerializedError( e ) ) {
         var err = this.erh.fromSerializedError( e );
 
         this.setVar("ERR", err.clazz );
@@ -2563,11 +2568,17 @@ class BasicRuntime {
 
   listStop() {
     if( this.listFlag ) {
-      var c = this.output;
-      this.listFlag = false;
-      this.HandleStopped( false );
-      this.printLine( "" );
-      this.printReady();
+      if( this.runFlag ) {
+        this.listFlag = false;
+        this.input.setInterActive( this.listFlagBakInteractive );
+      }
+      else {
+        var c = this.output;
+        this.listFlag = false;
+        this.HandleStopped( false );
+        this.printLine( "" );
+        this.printReady();
+      }
     }
   }
 
@@ -2733,30 +2744,38 @@ class BasicRuntime {
 
     if( ! ( renumbering === undefined )) {
 
-      var foundGoto = false;
-      var foundGotoIndex = 0;
+
+
+      var nopadTokens = [];
       for( i = 0; i<tokens.length; i++) {
-        if( tokens[i].type == "name" && (tokens[i].data == "GOTO" || tokens[i].data == "GOSUB") ) {
-          foundGoto = true;
-        } else {
+        if( tokens[i].type != "pad") {
+          nopadTokens.push( tokens[ i ] );
+        }
+      }
+
+      var foundGoto = false;
+      var foundGotoParIndex = -1;
+
+      for( i = 0; i<nopadTokens.length; i++) {
+
           if( i>1 ) {
-            if( tokens[i].type == "num" &&
-                tokens[i-1].type == "pad" &&
-                tokens[i-2].type == "name" && tokens[i-2].data == "THEN" ) {
+            if( nopadTokens[i].type == "num" &&
+                nopadTokens[i-1].type == "name" && nopadTokens[i-1].data == "THEN" ) {
               foundGoto = true;
-              foundGotoIndex = i;
+              foundGotoParIndex = i;
             }
-            else if( tokens[i].type == "num" && tokens[i-1].type == "name" && tokens[i-1].data == "THEN" ) {
+            else if( nopadTokens[i].type == "num" &&
+                  nopadTokens[i-1].type == "name" &&
+                  ( nopadTokens[i-1].data == "GOTO" || nopadTokens[i-1].data == "GOSUB" )) {
               foundGoto = true;
-              foundGotoIndex = i;
+              foundGotoParIndex = i;
             }
-          }
         }
 
-        if( tokens[i].type == "num" && foundGoto &&  i == (foundGotoIndex + 1)) {
-          var newLine = renumbering[ "old_" + tokens[i].data ];
+        if( nopadTokens[i].type == "num" && foundGoto &&  i == foundGotoParIndex ) {
+          var newLine = renumbering[ "old_" + nopadTokens[i].data ];
           if( newLine == undefined ) { newLine = 99999;}
-          tokens[i].data =newLine;
+          nopadTokens[i].data =newLine;
           foundGoto = false;
         }
       }
@@ -3496,12 +3515,29 @@ class BasicRuntime {
           }
           else if( pardefs[j] == PAR ) {
             var varName = cmd.params[j].parts[0].data;
-            var varType = "num";
-            if( varName.indexOf("$") > -1) {
-              varType = "str";
+            var varType0 = cmd.params[j].parts[0].type;
+
+            if( varType0 == "array" ) {
+
+              var varType = "num";
+              if( varName.indexOf("$") > -1) {
+                varType = "str";
+              }
+
+              values.push( { type: "var", value: varName, varType: varType0 + ":" + varType } );
+
+
+            }
+            else {
+              var varType = "num";
+              if( varName.indexOf("$") > -1) {
+                varType = "str";
+              }
+
+              values.push( { type: "var", value: varName, varType: varType } );
+
             }
 
-            values.push( { type: "var", value: varName, varType: varType } );
           }
           else { /*RAW*/
             //values.push( cmd.params[j].parts );
@@ -3623,6 +3659,11 @@ class BasicRuntime {
   closeScope() {
     this.scopes.pop();
     this.vars = this.scopes[ this.scopes.length - 1 ].vars;
+  }
+
+
+  getArray( a ) {
+   return this.vars[  "@array_" + a ];
   }
 
   setVar( a, b ) {
@@ -3789,7 +3830,7 @@ class BasicRuntime {
     this.inputVarsPointer = 0;
     this.output.write( "? ");
     this.inputStartInputPosX = this.output.getCursorPos()[0];
-    this.sys.blinkMode( true );
+
     this.flagStatusChange();
 
   }
@@ -4107,7 +4148,7 @@ class ExtendedCommands {
     return [RAW];
   }
 
-  _stat_info_cls() { return "general:Clears the screen:[<Reset Screen Flag>]"; }
+  _stat_info_cls() { return "general:Clears the screen:[<ResetScreenFlag>]"; }
 
   _stat_cls( pars ) {
     var reset = false;
@@ -4135,7 +4176,7 @@ class ExtendedCommands {
     }
   }
 
-  _stat_info_reset() { return "general:Resets the audio and the terminal:[ mode (0=screen, 1=audio, 2=all) ]"; }
+  _stat_info_reset() { return "general:Resets the audio and the terminal:[ <Mode> (0=screen, 1=audio, 2=all) ]"; }
   _stat_reset( pars ) {
 
     if( pars.length == 0 ) {
@@ -4176,7 +4217,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_reverse() { return "print:Reverse the print output:reverse-flag"; }
+  _stat_info_reverse() { return "print:Reverse the print output:<ReverseFlag>"; }
 
   _stat_reverse( pars ) {
 
@@ -4193,10 +4234,7 @@ class ExtendedCommands {
     this.output.control( 64 + reverse );
   }
 
-
-
-
-  _stat_info_beep() { return "sound:Make a short sound:channel,frequency,length"; }
+  _stat_info_beep() { return "sound:Make a short sound:<Channel>,<Frequency>,<Length>"; }
   _stat_beep( pars ) {
 
 
@@ -4217,7 +4255,7 @@ class ExtendedCommands {
 
 
 
-  _stat_info_sound() { return "sound:Make a pre defined sound:channel,frequency,length"; }
+  _stat_info_sound() { return "sound:Make a pre defined sound:<Channel>,<Frequency>,<Length>"; }
   _stat_sound( pars ) {
 
     if( pars.length == 0 ) {
@@ -4236,7 +4274,7 @@ class ExtendedCommands {
   }
 
 
-  _stat_info_setadr() { return "sound:Define Attach,Decay and Release:channel, attackT, decayT, releaseT"; }
+  _stat_info_setadr() { return "sound:Define Attach,Decay and Release:<Channel>, <AttackT>, <decayT>, <releaseT>"; }
   _stat_setadr( pars ) {
 
 
@@ -4254,7 +4292,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_volume() { return "sound:Change the audio volume:volume"; }
+  _stat_info_volume() { return "sound:Change the audio volume:<Volume>"; }
   _stat_volume( pars ) {
 
     if( pars.length != 1) {
@@ -4266,7 +4304,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_chfreq() { return "sound:Change the channel audio frequency:channel, frequency"; }
+  _stat_info_chfreq() { return "sound:Change the channel audio frequency:<Channel, Frequency>"; }
   _stat_chfreq( pars ) {
 
     if( pars.length != 2) {
@@ -4278,7 +4316,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_chvolume() { return "sound:Change the channel audio volume:channel, volume"; }
+  _stat_info_chvolume() { return "sound:Change the channel audio volume:<Channel>, <Volume>"; }
   _stat_chvolume( pars ) {
 
     if( pars.length != 2) {
@@ -4290,7 +4328,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_chsvolume() { return "sound:Change the channel sustain volume:channel, volume"; }
+  _stat_info_chsvolume() { return "sound:Change the channel sustain volume:<Channel>, <Volume>"; }
   _stat_chsvolume( pars ) {
 
     if( pars.length != 2) {
@@ -4302,7 +4340,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_addfx() { return "sound:Add a Sound FX part to the channel:channel, type, value, time"; }
+  _stat_info_addfx() { return "sound:Add a Sound FX part to the channel:<Channel>, <Type>, <Value>, <Time>"; }
   _stat_addfx( pars ) {
 
     if( pars.length != 4) {
@@ -4319,7 +4357,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_clearfx() { return "sound:Clear a sound effect:channel"; }
+  _stat_info_clearfx() { return "sound:Clear a sound effect:<Channel>"; }
   _stat_clearfx( pars ) {
 
     if( pars.length != 1) {
@@ -4331,11 +4369,11 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_playfx() { return "sound:Change the channel sustain volume:channel [,frequency ]"; }
+  _stat_info_playfx() { return "sound:Change the channel sustain volume:<Channel> [,<Frequency> ]"; }
   _stat_playfx( pars ) {
 
     if( pars.length < 1 || pars.length >2 ) {
-      this.erh.throwError( "parameter count", "expected channel [,frequency ]" );
+      this.erh.throwError( "parameter count", "expected <Channel> [,<Frequency> ]" );
       return
     }
 
@@ -4412,7 +4450,7 @@ class ExtendedCommands {
 
 
 
-  _stat_info_origin() { return "graphics:Specify origin of graphics console:<x0>,<y0>,<dx>,<dy>"; }
+  _stat_info_origin() { return "graphics:Specify origin of graphics console:<X0>,<Y0>,<Dx>,<Dy>"; }
   _stat_origin( pars ) {
     if( pars.length != 4 ) {
       this.erh.throwError( "parameter count", "expected 4 (x0,y0,dx,dy), not " + pars.length );
@@ -4443,7 +4481,7 @@ class ExtendedCommands {
     );
   }
 
-  _stat_info_line() { return "graphics:Draw a line:<x0>,<y0>,<x1>,<y1>"; }
+  _stat_info_line() { return "graphics:Draw a line:<X0>,<Y0>,<X1>,<Y1>"; }
   _stat_line( pars ) {
     if( pars.length != 4 ) {
       this.erh.throwError( "parameter count", "expected 2 (x0,y0,y1,y1), not " + pars.length );
@@ -4464,7 +4502,7 @@ class ExtendedCommands {
     );
   }
 
-  _stat_info_plot() { return "graphics:Plot a pixel:<x0>,<y0>,<x1>,<y1>"; }
+  _stat_info_plot() { return "graphics:Plot a pixel:<X0>,<Y0>,<X1>,<Y1>"; }
   _stat_plot( pars ) {
     if( pars.length != 2 ) {
       this.erh.throwError( "parameter count", "expected 2 (x,y), not " + pars.length );
@@ -4479,7 +4517,7 @@ class ExtendedCommands {
     this.bitmap.plot( pars[0].value, pars[1].value );
   }
 
-  _stat_info_center() { return "print:Print horizontal center:<String to Print>"; }
+  _stat_info_center() { return "print:Print horizontal center:<StringToPrint>"; }
   _stat_center( pars ) {
 
     var string;
@@ -4499,7 +4537,7 @@ class ExtendedCommands {
   }
 
 
-  _stat_info_gtext() { return "graphics:Write text at position x,y:X,Y,TEXT"; }
+  _stat_info_gtext() { return "experimental:Write text at position x,y:<X>,<Y>,<Text>"; }
   _stat_gtext( pars ) {
 
     var string;
@@ -4714,7 +4752,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_color() { return "print:Sets the console color index:<Pen Color>[, <Paper Color>\n[, <Border Color>]]"; }
+  _stat_info_color() { return "print:Sets the console color index:<PenColor>[, <PaperColor>\n[, <BorderColor>]]"; }
   _stat_color( pars ) {
 
     var result;
@@ -4742,7 +4780,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_display() { return "general:Set the console display mode:<Display Mode Number>"; }
+  _stat_info_display() { return "general:Set the console display mode:<DisplayModeNumber>"; }
   _stat_display( pars ) {
 
     var result;
@@ -4780,7 +4818,7 @@ class ExtendedCommands {
 
   }
 
-  _stat_info_border() { return "general:Changes the border color:<Color Index>"; }
+  _stat_info_border() { return "general:Changes the border color:<ColorIndex>"; }
   _stat_border( pars ) {
 
     var result;
@@ -4820,6 +4858,18 @@ class ExtendedCommands {
   }
 
 
+  _stat_info_txtcopy() { return "experimental:Copy data to clipboard:<StringData$>"; }
+  _stat_txtcopy( pars ) {
+    if( pars.length != 1) {
+        this.erh.throwError( "parameter count", "dcopy needs 1 parameter" );
+    }
+
+    this.sys.export( pars[0].value + "", "clipboard" );
+
+  }
+
+
+
   _fun_info_peekcl() { return "poke:Get color information directly from from screen buffer:<Y>,<X>[,<Mode]"; }
   _fun_peekcl( pars ) {
 
@@ -4852,7 +4902,7 @@ class ExtendedCommands {
   }
 
 
-  _fun_info_ucbase() { return "string:Return unicode-set base character code:<UC-Setname$>"; }
+  _fun_info_ucbase() { return "string:Return unicode-set base character code:<SetName$>"; }
   _fun_ucbase( pars ) {
 
     if( pars.length != 1 ) {
@@ -5295,16 +5345,21 @@ class BasicCommands {
     }
 
     if( pars.length == 0) {
-        result = runtime.load( "*", false );
+        result = runtime.load( "*", false, -1 );
     }
     else {
-      result = runtime.load( pars[0].value, false );
+      if( pars.length == 1) {
+        result = runtime.load( pars[0].value, false, -1 );
+      }
+      else if( pars.length == 2) {
+        result = runtime.load( pars[0].value, false, pars[1].value );
+      }
     }
     this.aSync = true;
 
   }
 
-  _stat_info_setdata() { return "io:Set data pointer:[<label>]"; }
+  _stat_info_setdata() { return "experimental:Set data pointer:[<Label>]"; }
   _stat_setdata( pars ) {
 
     var runtime = this.runtime;
@@ -5322,7 +5377,7 @@ class BasicCommands {
 
   }
 
-  _stat_info_datablocks() { return "io:Dump data blocks in memory"; }
+  _stat_info_datablocks() { return "experimental:Dump data blocks in memory"; }
   _stat_datablocks( pars ) {
 
     var runtime = this.runtime;
@@ -5337,7 +5392,7 @@ class BasicCommands {
 
   }
 
-  _stat_info_loaddata() { return "io:Load data in memory:<Filename> [, <Type>, <Label>]"; }
+  _stat_info_loaddata() { return "experimental:Load data in memory:<Filename> [, <Type>, <Label>]"; }
   _stat_loaddata( pars ) {
 
     var runtime = this.runtime;
@@ -5369,7 +5424,7 @@ class BasicCommands {
   }
 
 
-  _stat_info_dir() { return "program:List a files on the current file system:[PATH]"; }
+  _stat_info_dir() { return "program:List a files on the current file system:[<Path> [,<Device>]]"; }
   _stat_dir( pars ) {
     var runtime = this.runtime;
     var result;
@@ -5382,11 +5437,15 @@ class BasicCommands {
     }
 
     if( pars.length == 1) {
-      runtime.dir( pars[0].value );
+      runtime.dir( pars[0].value, -1 );
+      return;
+    }
+    else if( pars.length == 2) {
+      runtime.dir( pars[0].value, pars[1].value );
       return;
     }
 
-    this.erh.throwError( "parameter", "dir takes 0 or 1 parameter(s)"  );
+    this.erh.throwError( "parameter", "dir takes 0,1 or 2 parameter(s)"  );
 
     this.aSync = true;
 
@@ -5429,7 +5488,7 @@ class BasicCommands {
   }
 
 
-  _stat_info_tracevar() { return "program:Trace variable changes:[<\"Variable Name\">]"; }
+  _stat_info_tracevar() { return "program:Trace variable changes:[<VariableName$>]"; }
   _stat_tracevar( pars ) {
 
     var runtime = this.runtime;
@@ -5474,10 +5533,10 @@ class BasicCommands {
     }
 
     if( pars.length == 0) {
-        result = runtime.load( "*", true );
+        result = runtime.load( "*", true, -1 );
     }
     else {
-      result = runtime.load( pars[0].value, true );
+      result = runtime.load( pars[0].value, true, -1 );
     }
     this.aSync = true;
 
@@ -5490,8 +5549,11 @@ class BasicCommands {
     if( pars.length == 0) {
         runtime.save( null );
     }
-    else {
-      runtime.save( pars[0].value );
+    else if ( pars.length == 1 ){
+      runtime.save( pars[0].value, -1 );
+    }
+    else if( pars.length == 2) {
+      runtime.save( pars[0].value, pars[1].value );
     }
   }
 
@@ -5499,13 +5561,19 @@ class BasicCommands {
   _stat_delete( pars ) {
     var runtime = this.runtime;
 
-    if( pars.length != 1) {
+    if( pars.length != 1 && pars.length != 2) {
         this.erh.throwError( "parameter", "delete without filename" );
     }
-    else {
-      runtime.deleteFile( pars[0].value );
+    else if ( pars.length == 1 ){
+      runtime.deleteFile( pars[0].value, -1 );
+    }
+    else if( pars.length == 2) {
+      runtime.deleteFile( pars[0].value, pars[1].value );
     }
   }
+
+
+
 
   _stat_info_run() { return "program:Run the current program"; }
   _stat_run( pars ) {
@@ -5602,7 +5670,7 @@ class BasicCommands {
 
   /************************ functions ************************/
 
-  _fun_info_datalen() { return "io:Return length of current datablock"; }
+  _fun_info_datalen() { return "experimental:Return length of current datablock"; }
   _fun_datalen( pars ) {
     var runtime = this.runtime;
     return runtime.getDataLength();
@@ -5809,7 +5877,7 @@ class BasicCommands {
   }
 
 
-  _fun_info_rnd() { return "math:Random number between 0 and 1:<Seed Or Mode>"; }
+  _fun_info_rnd() { return "math:Random number between 0 and 1:<SeedOrMode> (0=JS, 1=Seed, NoValue=Default)"; }
   _fun_rnd( pars ) {
 
     if( pars.length >1) {
@@ -5920,7 +5988,7 @@ class BasicCommands {
     return Math.cos( pars[0].value);
   }
 
-  _fun_info_spc() { return "string:Spaces for padding:<Size Of Padding>"; }
+  _fun_info_spc() { return "string:Spaces for padding:<SizeOfPadding>"; }
   _fun_spc( pars ) {
     var out="";
     for( var i=0; i<pars[0].value; i++) {
@@ -5957,7 +6025,7 @@ class BasicCommands {
   }
 
 
-  _fun_info_tab() { return "print:Tab cursor Xpos to the right:<Number of Tabs>"; }
+  _fun_info_tab() { return "print:Tab cursor Xpos to the right:<NumberOfTabs>"; }
   _fun_tab( pars ) {
     var runtime = this.runtime;
 
@@ -8035,6 +8103,14 @@ class Input {
 
   }
 
+
+  getInterActive() {
+
+    return this.interactive;
+
+  }
+
+
   flush() {
     this.keyPress = [];
   }
@@ -8934,6 +9010,44 @@ class TextArea {
 	}
 
 
+
+
+	__int_scrollLinesDownFrom( y  ) {
+
+			for( var yy=this.rows-1; yy>y; yy-- ) {
+				for( var xx=0; xx<this.cols; xx++ ) {
+
+					var cell1 = this.cellel[ yy-1  ][ xx ];
+					var cell2 = this.cellel[ yy  ]  [ xx];
+
+					cell2.fg = cell1.fg;
+					cell2.bg = cell1.bg;
+					cell2.txt = cell1.txt;
+
+				}
+			}
+
+			for( var xx=0; xx<this.cols; xx++ ) {
+
+				var cell1 = this.cellel[ yy  ][ xx ];
+
+				cell1.txt = " ";
+
+			}
+
+			this._int_addChangeAll();
+
+	}
+
+
+	ScrollDownByCurrentLine() {
+
+		if( (this.y ) < (this.rows-1) ) {
+			this.__int_scrollLinesDownFrom( this.y );
+			this._int_flush();
+		}
+	}
+
 	__int_scrollLineRightFrom( x0, y  ) {
 
 		var x = x0;
@@ -9313,6 +9427,7 @@ class BitMap {
 		}
 	}
 
+/*
 	_int_convertxy_xpyp( x,y ) {
 		return [ Math.floor(x + this.ox0), Math.floor(y + this.oy0)];
 	}
@@ -9328,7 +9443,7 @@ class BitMap {
 	_int_convertxy_xmym( x,y ) {
 		return [ Math.floor( this.ox0 - x), Math.floor( this.oy0 - y )];
 	}
-
+*/
 
   plot( x, y ) {
 		var xy2 = this._int_convertxy( x, y );

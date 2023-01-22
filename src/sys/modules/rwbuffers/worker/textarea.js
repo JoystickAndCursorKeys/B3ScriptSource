@@ -651,6 +651,44 @@ class TextArea {
 	}
 
 
+
+
+	__int_scrollLinesDownFrom( y  ) {
+
+			for( var yy=this.rows-1; yy>y; yy-- ) {
+				for( var xx=0; xx<this.cols; xx++ ) {
+
+					var cell1 = this.cellel[ yy-1  ][ xx ];
+					var cell2 = this.cellel[ yy  ]  [ xx];
+
+					cell2.fg = cell1.fg;
+					cell2.bg = cell1.bg;
+					cell2.txt = cell1.txt;
+
+				}
+			}
+
+			for( var xx=0; xx<this.cols; xx++ ) {
+
+				var cell1 = this.cellel[ yy  ][ xx ];
+
+				cell1.txt = " ";
+
+			}
+
+			this._int_addChangeAll();
+
+	}
+
+
+	ScrollDownByCurrentLine() {
+
+		if( (this.y ) < (this.rows-1) ) {
+			this.__int_scrollLinesDownFrom( this.y );
+			this._int_flush();
+		}
+	}
+
 	__int_scrollLineRightFrom( x0, y  ) {
 
 		var x = x0;

@@ -17,6 +17,14 @@ class Input {
 
   }
 
+
+  getInterActive() {
+
+    return this.interactive;
+
+  }
+
+
   flush() {
     this.keyPress = [];
   }

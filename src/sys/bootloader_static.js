@@ -5,7 +5,7 @@ import  BootSys   from        './bootsys.js';
 
 import  displaymodes   from        './modules/displaymodes.js';
 import  tablecon   from        './modules/tablecon.js';
-import  canvas   from        './modules/canvas.js';
+import  canvas   from        './modules/canvas/module.js';
 import mrbeep  from       './modules/mrbeep/module.js';
 import  simplewarning  from   './modules/simplewarning.js';
 import  privwarning from     './modules/privwarning.js';

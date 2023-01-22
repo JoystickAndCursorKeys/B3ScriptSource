@@ -1,3 +1,6 @@
+import  SymbolsTileImage   from    './symbols.js';
+import  SimpleTiles   from    './simpletiles.js';
+
 class KERNALMODULE {
 
 	constructor( sys ) {
@@ -5,9 +8,8 @@ class KERNALMODULE {
 		this.cursorOn = false;
 		this.hidden = false;
 		this.blinking = true;
-		this.reverse = false;
 		this.cursorMode = "insert";
-
+		this.bmFontEnable = true;
 		this.colors ={};
 
 		this.palette = [
@@ -29,6 +31,7 @@ class KERNALMODULE {
 			"#8379F8"
 
 		];
+
 
 
 		var pad2 = function( hs ) {
@@ -64,8 +67,42 @@ class KERNALMODULE {
 			)
 		}
 
+
 		this.defaultTextMode();
 
+		var __this = this;
+		var image = new Image();
+		image.onload = function ( evt ) {
+			__this._postLoadFontImage();
+		}
+		image.src = new SymbolsTileImage().getBlobURL();
+
+		this.fimage = image;
+
+		var UNICODE=0;
+		var CUSTOM=1;
+		var GLYPHS0=2;
+		var GLYPHS1=3;
+		var GLYPHS2=4;
+		var GLYPHS3=5;
+
+		this.GLYPHSADDR = [ NaN, NaN, 0, 128, 256 , 384];
+
+		this.characterbank0 = GLYPHS0;
+		this.characterbank1 = GLYPHS1;
+		this.characterbank2 = GLYPHS2;
+		this.characterbank3 = UNICODE;
+
+		this.bankDefaultBaseAddr = 256;
+		this.bankBaseAddr = this.bankDefaultBaseAddr;
+
+
+	}
+
+	_postLoadFontImage() {
+
+
+		this.bfont = new SimpleTiles( this.fimage, 12, 20, { r:0, g:0, b:0 } );
 
 	}
 
@@ -111,6 +148,8 @@ class KERNALMODULE {
 
 		this.colors.bgHTML = this.palette[ oc.bg ];
 		this.colors.fgHTML = this.palette[ oc.fg ];
+		this.colors.bgRGB = this.bmPalette[ oc.bg ];
+		this.colors.fgRGB = this.bmPalette[ oc.fg ];
 
 	}
 
@@ -124,7 +163,6 @@ class KERNALMODULE {
 
 			this.cursorOn = false;
 			this.blinking = true;
-			this.reverse = false;
 
 			var w;
 			var h;
@@ -368,6 +406,8 @@ showInner() {
 		oc.bg = bg;
 		oc.fgHTML = this.palette[ oc.fg ];
 		oc.bgHTML = this.palette[ oc.bg ];
+		oc.fgRGB = this.bmPalette[ oc.fg ];
+		oc.bgRGB = this.bmPalette[ oc.bg ];
 
 	}
 
@@ -379,6 +419,8 @@ showInner() {
 		oc.bg = this.oldbg;
 		oc.fgHTML = this.palette[ oc.fg ];
 		oc.bgHTML = this.palette[ oc.bg ];
+		oc.fgRGB = this.bmPalette[ oc.fg ];
+		oc.bgRGB = this.bmPalette[ oc.bg ];
 
 	}
 
@@ -468,6 +510,8 @@ showInner() {
 
 				oc.bgHTML = this.palette[ src.bg ];
 				oc.fgHTML = this.palette[ src.fg ];
+				oc.bgRGB = this.bmPalette[ src.bg ];
+				oc.fgRGB = this.bmPalette[ 	src.fg ];
 
 				cell.txt = ch;
 				cell.fg = src.fg;
@@ -507,13 +551,16 @@ showInner() {
 
 	}
 
+	setCharacterBank( addr, mode ) {
+		this.characterbank[addr] = mode;
+	}
+
 	_int_paintchar( x, y, ch ) {
 
 			this.updCtxImageData.synched = false;
 
 			var oc = this.colors;
 			var index = ch + ":"+oc.bg+":"+oc.fg;
-			//this.reverse
 			var cacheel = this.cache[ index ];
 			var fsw = this.fontSizeIntW;
 			var fsh = this.fontSizeIntH;
@@ -521,9 +568,90 @@ showInner() {
 			if( ! cacheel ) {
 
 				var cvs = document.createElement("canvas");
-				var ctx = cvs.getContext('2d', {alpha: false});
 
-				if( ch.charCodeAt(0) > 255 ) {
+				var code = ch.charCodeAt(0);
+
+/*
+	what is this.bmFontEnable ??
+
+		var UNICODE=0;
+		var CUSTOM=1;
+		var GLYPHS0=2;
+		var GLYPHS1=3;
+		var GLYPHS2=4;
+		var GLYPHS3=5;
+		this.characterbank0 = GLYPHS0;
+		this.characterbank1 = GLYPHS1;
+		this.characterbank2 = GLYPHS2;
+		this.characterbank3 = GLYPHS3;
+
+		this.bankDefaultBaseAddr = 256;
+		this.bankBaseAddr = this.bankDefaultBaseAddr;
+
+*/
+
+				var GLYPHS0=2;
+				var GLYPHS1=3;
+				var GLYPHS2=4;
+				var GLYPHS3=5;
+
+				var bitmapchar = false;
+				var glyphs;
+				var bitmapchar0 = ( code >= this.bankBaseAddr && code < (this.bankBaseAddr + 512));
+				var charAddr;
+				var relCode;
+				//var bank;
+
+
+				if( bitmapchar0  ) {
+
+					if ( code < (this.bankBaseAddr + 128) && this.characterbank0 >= GLYPHS0) {
+						 bitmapchar = true;
+						 //bank = 0;
+					   //glyphs = this.characterbank0;
+						// bankaddr = 0;
+						// if( )
+						// charAddr = code - this.bankBaseAddr;
+
+						relCode = code - (this.bankBaseAddr );
+						charAddr = this.GLYPHSADDR[ this.characterbank0 ] + relCode;
+					}
+					else if ( (code >= this.bankBaseAddr + 128) && code < (this.bankBaseAddr + 256) && this.characterbank1 >= GLYPHS0) {
+						bitmapchar = true;
+						//bank = 1;
+						//glyphs = this.characterbank1;
+						//charAddr = code - (this.bankBaseAddr);
+
+						relCode = code - (this.bankBaseAddr + 128);
+						charAddr = this.GLYPHSADDR[ this.characterbank1 ] + relCode;
+
+/*
+						example:
+							code = 130
+							this.characterbank1 = GLYPHS2;
+
+							charBaseAddr = 130-128 = 2
+							charAddr = addr( GLYPHS2 ) + 2;
+*/
+					}
+					else if ( (code >= this.bankBaseAddr + 256 ) && code < (this.bankBaseAddr + 384) && this.characterbank2 >= GLYPHS0) {
+						bitmapchar = true;
+						//glyphs = this.characterbank2;
+						relCode = code - (this.bankBaseAddr + 256);
+						charAddr = this.GLYPHSADDR[ this.characterbank2 ] + relCode;
+					}
+					else if ( (code >= this.bankBaseAddr + 384 ) && this.characterbank3 >= GLYPHS0) {
+						bitmapchar = true;
+						//glyphs = this.characterbank3;
+						relCode = code - (this.bankBaseAddr + 384);
+						charAddr = this.GLYPHSADDR[ this.characterbank3 ] + relCode;
+					}
+
+					//bankaddr =
+
+				}
+
+				if( code > 256 && !bitmapchar ) {
 					var tmp3 =  this.ctx.measureText( ch )  ;
 					var tmpw =  Math.floor( tmp3.width ) ;
 					if( tmpw > fsw ) {
@@ -534,19 +662,66 @@ showInner() {
 				cvs.width = fsw;
 				cvs.height = fsh;
 
-				ctx.font =  this.fontSizeCSS + " " + this.fontFamily;
-				ctx.textBaseline = "top";
+				var ctx = cvs.getContext('2d', {alpha: false});
 
-				var off = 0;
-				if( this.offsets[ ch ] ) {
-					off = this.offsets[ ch ];
+				if( bitmapchar ) {
+
+					var grid = this.bfont.getCharData( charAddr ); //code-this.bankBaseAddr );
+
+					var imgdata = ctx.getImageData(0, 0, fsw, fsh );
+					var sd  = imgdata.data;
+
+					var offset;
+					var yoffset = 0, xoffset=0;
+					var yofflen = 4 * fsw;
+					var xofflen = 4;
+
+					var bgc = this.colors.bgRGB;
+					var fgc = this.colors.fgRGB;
+
+ 					for( var yy=0; yy<fsh; yy++) {
+
+						xoffset = 0;
+ 						for( var xx=0; xx<fsw; xx++) {
+							var pix = grid[yy][xx];
+							offset = xoffset + yoffset;
+
+							if( pix ) {
+								sd[ offset + 0] = fgc.r;
+								sd[ offset + 1] = fgc.g;
+								sd[ offset + 2] = fgc.b;
+							}
+							else {
+								sd[ offset + 0] = bgc.r;
+								sd[ offset + 1] = bgc.g;
+								sd[ offset + 2] = bgc.b;
+							}
+
+							sd[ offset + 3] = 255;
+							xoffset += xofflen;
+						}
+						yoffset += yofflen;
+					}
+
+					ctx.putImageData( imgdata, 0, 0);
 				}
+				else {
+					ctx.font =  this.fontSizeCSS + " " + this.fontFamily;
+					ctx.textBaseline = "top";
 
-				ctx.fillStyle = this.colors.bgHTML
-				ctx.fillRect(  0,0, fsw, fsh);
+					var off = 0;
+					if( this.offsets[ ch ] ) {
+						off = this.offsets[ ch ];
+					}
 
-				ctx.fillStyle = this.colors.fgHTML;
-				ctx.fillText( ch , off, 0);
+					ctx.fillStyle = this.colors.bgHTML;
+					ctx.fillRect(  0,0, fsw, fsh);
+
+					ctx.fillStyle = this.colors.fgHTML;
+					ctx.fillText( ch , off, 0);
+
+
+				}
 
 				this.cache[ index ] = { ctx: ctx, cvs: cvs, w: fsw } ;
 				cacheel = this.cache[ index ];
@@ -650,6 +825,9 @@ showInner() {
 
 			this.colors.bgHTML = this.palette[ p.bg ];
 			this.colors.fgHTML = this.palette[ 	p.fg ];
+			this.colors.bgRGB = this.bmPalette[ p.bg ];
+			this.colors.fgRGB = this.bmPalette[ 	p.fg ];
+
 			this.colors.bg = p.bg;
 			this.colors.fg = p.fg;
 			this.cursorMode = p.cursorMode;
@@ -681,6 +859,9 @@ showInner() {
 			}
 			this.colors.bgHTML = this.palette[ p.bg ];
 			this.colors.fgHTML = this.palette[ 	p.fg];
+			this.colors.bgRGB = this.bmPalette[ p.bg ];
+			this.colors.fgRGB = this.bmPalette[ 	p.fg ];
+
 			this.colors.bg = p.bg;
 			this.colors.fg = p.fg;
 			this.cursorMode = p.cursorMode;

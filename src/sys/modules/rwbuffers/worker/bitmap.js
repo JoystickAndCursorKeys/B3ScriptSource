@@ -97,6 +97,7 @@ class BitMap {
 		}
 	}
 
+/*
 	_int_convertxy_xpyp( x,y ) {
 		return [ Math.floor(x + this.ox0), Math.floor(y + this.oy0)];
 	}
@@ -112,7 +113,7 @@ class BitMap {
 	_int_convertxy_xmym( x,y ) {
 		return [ Math.floor( this.ox0 - x), Math.floor( this.oy0 - y )];
 	}
-
+*/
 
   plot( x, y ) {
 		var xy2 = this._int_convertxy( x, y );

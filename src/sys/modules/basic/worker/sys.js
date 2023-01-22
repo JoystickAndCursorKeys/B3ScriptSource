@@ -35,9 +35,9 @@ function init_sys() {
 
   }
 
-  sys.load = function( rt, path ) {
+  sys.load = function( rt, path, device ) {
 
-      post("load", { processId: rt.processId, path:path } );
+      post("load", { processId: rt.processId, path:path, device: device } );
 
   }
 
@@ -47,21 +47,21 @@ function init_sys() {
 
   }
 
-  sys.save = function( rt, path, data ) {
+  sys.save = function( rt, path, device, data ) {
 
-      post("save", { processId: rt.processId, path:path, data: data } );
-
-  }
-
-  sys.delete = function( rt, path ) {
-
-      post("delete", { processId: rt.processId, path:path } );
+      post("save", { processId: rt.processId, path:path, device: device , data: data } );
 
   }
 
-  sys.dir = function( rt, path ) {
+  sys.delete = function( rt, path, device ) {
 
-      post("dir", { processId: rt.processId, path:path } );
+      post("delete", { processId: rt.processId, path:path, device: device  } );
+
+  }
+
+  sys.dir = function( rt, path, device ) {
+
+      post("dir", { processId: rt.processId, path:path, device: device } );
 
   }
 

@@ -8,7 +8,7 @@ class FILESYSMODULE {
     }
 
     this.lib = new HTTPLib( sys );
-
+    this.deviceId = 2;
   }
 
   init() {}

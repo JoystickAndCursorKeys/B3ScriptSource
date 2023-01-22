@@ -32,7 +32,7 @@ class LIB {
     return {
       success: false,
       reason: reason,
-      details: details,
+      message: details,
       fsErrorSignature: true,
     }
   }

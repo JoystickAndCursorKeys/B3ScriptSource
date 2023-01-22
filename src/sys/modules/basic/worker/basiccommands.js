@@ -301,16 +301,21 @@ class BasicCommands {
     }
 
     if( pars.length == 0) {
-        result = runtime.load( "*", false );
+        result = runtime.load( "*", false, -1 );
     }
     else {
-      result = runtime.load( pars[0].value, false );
+      if( pars.length == 1) {
+        result = runtime.load( pars[0].value, false, -1 );
+      }
+      else if( pars.length == 2) {
+        result = runtime.load( pars[0].value, false, pars[1].value );
+      }
     }
     this.aSync = true;
 
   }
 
-  _stat_info_setdata() { return "io:Set data pointer:[<label>]"; }
+  _stat_info_setdata() { return "experimental:Set data pointer:[<Label>]"; }
   _stat_setdata( pars ) {
 
     var runtime = this.runtime;
@@ -328,7 +333,7 @@ class BasicCommands {
 
   }
 
-  _stat_info_datablocks() { return "io:Dump data blocks in memory"; }
+  _stat_info_datablocks() { return "experimental:Dump data blocks in memory"; }
   _stat_datablocks( pars ) {
 
     var runtime = this.runtime;
@@ -343,7 +348,7 @@ class BasicCommands {
 
   }
 
-  _stat_info_loaddata() { return "io:Load data in memory:<Filename> [, <Type>, <Label>]"; }
+  _stat_info_loaddata() { return "experimental:Load data in memory:<Filename> [, <Type>, <Label>]"; }
   _stat_loaddata( pars ) {
 
     var runtime = this.runtime;
@@ -375,7 +380,7 @@ class BasicCommands {
   }
 
 
-  _stat_info_dir() { return "program:List a files on the current file system:[PATH]"; }
+  _stat_info_dir() { return "program:List a files on the current file system:[<Path> [,<Device>]]"; }
   _stat_dir( pars ) {
     var runtime = this.runtime;
     var result;
@@ -388,11 +393,15 @@ class BasicCommands {
     }
 
     if( pars.length == 1) {
-      runtime.dir( pars[0].value );
+      runtime.dir( pars[0].value, -1 );
+      return;
+    }
+    else if( pars.length == 2) {
+      runtime.dir( pars[0].value, pars[1].value );
       return;
     }
 
-    this.erh.throwError( "parameter", "dir takes 0 or 1 parameter(s)"  );
+    this.erh.throwError( "parameter", "dir takes 0,1 or 2 parameter(s)"  );
 
     this.aSync = true;
 
@@ -435,7 +444,7 @@ class BasicCommands {
   }
 
 
-  _stat_info_tracevar() { return "program:Trace variable changes:[<\"Variable Name\">]"; }
+  _stat_info_tracevar() { return "program:Trace variable changes:[<VariableName$>]"; }
   _stat_tracevar( pars ) {
 
     var runtime = this.runtime;
@@ -480,10 +489,10 @@ class BasicCommands {
     }
 
     if( pars.length == 0) {
-        result = runtime.load( "*", true );
+        result = runtime.load( "*", true, -1 );
     }
     else {
-      result = runtime.load( pars[0].value, true );
+      result = runtime.load( pars[0].value, true, -1 );
     }
     this.aSync = true;
 
@@ -496,8 +505,11 @@ class BasicCommands {
     if( pars.length == 0) {
         runtime.save( null );
     }
-    else {
-      runtime.save( pars[0].value );
+    else if ( pars.length == 1 ){
+      runtime.save( pars[0].value, -1 );
+    }
+    else if( pars.length == 2) {
+      runtime.save( pars[0].value, pars[1].value );
     }
   }
 
@@ -505,13 +517,19 @@ class BasicCommands {
   _stat_delete( pars ) {
     var runtime = this.runtime;
 
-    if( pars.length != 1) {
+    if( pars.length != 1 && pars.length != 2) {
         this.erh.throwError( "parameter", "delete without filename" );
     }
-    else {
-      runtime.deleteFile( pars[0].value );
+    else if ( pars.length == 1 ){
+      runtime.deleteFile( pars[0].value, -1 );
+    }
+    else if( pars.length == 2) {
+      runtime.deleteFile( pars[0].value, pars[1].value );
     }
   }
+
+
+
 
   _stat_info_run() { return "program:Run the current program"; }
   _stat_run( pars ) {
@@ -608,7 +626,7 @@ class BasicCommands {
 
   /************************ functions ************************/
 
-  _fun_info_datalen() { return "io:Return length of current datablock"; }
+  _fun_info_datalen() { return "experimental:Return length of current datablock"; }
   _fun_datalen( pars ) {
     var runtime = this.runtime;
     return runtime.getDataLength();
@@ -815,7 +833,7 @@ class BasicCommands {
   }
 
 
-  _fun_info_rnd() { return "math:Random number between 0 and 1:<Seed Or Mode>"; }
+  _fun_info_rnd() { return "math:Random number between 0 and 1:<SeedOrMode> (0=JS, 1=Seed, NoValue=Default)"; }
   _fun_rnd( pars ) {
 
     if( pars.length >1) {
@@ -926,7 +944,7 @@ class BasicCommands {
     return Math.cos( pars[0].value);
   }
 
-  _fun_info_spc() { return "string:Spaces for padding:<Size Of Padding>"; }
+  _fun_info_spc() { return "string:Spaces for padding:<SizeOfPadding>"; }
   _fun_spc( pars ) {
     var out="";
     for( var i=0; i<pars[0].value; i++) {
@@ -963,7 +981,7 @@ class BasicCommands {
   }
 
 
-  _fun_info_tab() { return "print:Tab cursor Xpos to the right:<Number of Tabs>"; }
+  _fun_info_tab() { return "print:Tab cursor Xpos to the right:<NumberOfTabs>"; }
   _fun_tab( pars ) {
     var runtime = this.runtime;
 

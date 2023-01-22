@@ -7,6 +7,8 @@ class FILESYSMODULE {
     this.initialized = false;
     this.sys = sys;
     this.prefix = sys.SIG + sys.SUBSYS  + "__" ;
+
+    this.deviceId = 6;
   }
 
   init() {
@@ -82,7 +84,7 @@ class FILESYSMODULE {
       dir.files = files2;
       dir.free = 32-dir.files.length;
     }
-        
+
     return dir;
 
   }
