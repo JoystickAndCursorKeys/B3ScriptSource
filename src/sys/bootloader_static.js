@@ -17,6 +17,8 @@ import lfs  from             './modules/fs/lfs.js';
 import ramfs  from           './modules/fs/ramfs.js';
 import qfs  from             './modules/fs/qfs.js';
 import scripturl  from       './modules/fs/scripturl.js';
+import exportfs  from       './modules/fs/transferfs.js';
+import site  from           './modules/fs/http/sitefs.js';
 import basic from           './modules/basic/module.js';
 import basicmenu from           './modules/basicmenu/module.js';
 
@@ -42,9 +44,11 @@ boot.i.sfs = sessionfs
 boot.i.cache = lfs;
 boot.i.ramfs = ramfs;
 boot.i.script = scripturl;
+boot.i.site = site;
+boot.i.export = exportfs;
 boot.i.qfs = qfs;
 boot.dep.basicmenu = [ "domelinput" ];
-boot.dep.qfs = [ "ramfs", "cache", "sfs", "script" ];
+boot.dep.qfs = [ "ramfs", "cache", "sfs", "script", "site", "export" ];
 boot.dep.basic = [ "canvas", "tablecon", "displaymodes", "mrbeepaudio", "qfs", "htmlwrapper", "basicmenu" ];
 
 boot.initSimpleLogging();
