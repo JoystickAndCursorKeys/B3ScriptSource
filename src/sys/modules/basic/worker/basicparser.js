@@ -730,6 +730,8 @@ class Parser {
     newParts = this.groupParts( expression.parts, "^" );
     newParts = this.groupParts( newParts, "/" );
     newParts = this.groupParts( newParts, "*" );
+    newParts = this.groupParts( newParts, "+" );
+    newParts = this.groupParts( newParts, "-" );
 
     var oldExpression = expression;
     expression = {
