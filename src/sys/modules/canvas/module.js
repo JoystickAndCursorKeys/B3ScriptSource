@@ -236,7 +236,7 @@ class KERNALMODULE {
 			this.ctx2 = this.cvs2.getContext('2d');
 
 			this.cvsCursor = document.createElement("canvas");
-			this.ctxCursor = this.cvsCursor.getContext('2d');
+			this.ctxCursor = this.cvsCursor.getContext('2d' , {alpha: false} );
 
 			this.cache = [];
 			this.updCtxImageData = { synched: false }
@@ -356,6 +356,8 @@ showInner() {
 		}
 	}
 
+
+
 	show() {
 		this.init();
 		if( this.hidden ) {
@@ -369,6 +371,12 @@ showInner() {
 		return null;
 	}
 
+	gfilter( f ) {
+		this.outDiv1.filter = f;
+		return;
+		this.ctx.filter = f;
+		this._int_Refresh();
+	}
 
 	blinkMode( mode ) {
 		this.blinking = mode;
@@ -529,6 +537,57 @@ showInner() {
 
 	}
 
+
+	_int_Refresh() {
+
+		try {
+
+		var fsw = this.fontSizeIntW;
+		var fsh = this.fontSizeIntH;
+		var oc = this.colors;
+		var yy = 0;
+
+		var obg = oc.bg;
+		var ofg = oc.fg;
+
+		for( var y=0; y<=this.rows-1 ; y++) {
+
+			var offX =0;
+
+			for( var x=0; x<=this.cols-1 ;x++) {
+				
+				var cell = this.cells[ y ][ x ];
+				var ch = cell.txt;
+				var fg = this.cells[ y ][ x ].fg;
+				var bg = this.cells[ y ][ x ].bg;
+
+				oc.bg = bg;
+				oc.fg = fg;
+				oc.bgHTML = this.palette[ bg ];
+				oc.fgHTML = this.palette[ fg ];
+				oc.bgRGB = this.bmPalette[ bg ];
+				oc.fgRGB = this.bmPalette[ 	fg ];
+
+				this._int_paintchar( offX , yy , ch );
+				offX += fsw;
+			}
+			yy += fsh;
+		}
+
+
+		oc.bg = obg;
+		oc.fg = ofg;
+		oc.bgHTML = this.palette[ oc.bg ];
+		oc.fgHTML = this.palette[ oc.fg ];
+		oc.bgRGB = this.bmPalette[ oc.bg ];
+		oc.fgRGB = this.bmPalette[ oc.fg ];
+	} catch ( e ) {
+		console.log("x= " + x + " y= " + y);
+		console.log(e);
+	}
+
+	}
+
 	paintCursor( x, y, ch , col1, col2, mode ) {
 		this._int_storeset_color( col2, col1 );
 		this._int_paintchar( x, y, ch );
@@ -561,6 +620,8 @@ showInner() {
 
 			var oc = this.colors;
 			var index = ch + ":"+oc.bg+":"+oc.fg;
+			if( ch == " ") { var index = ch + ":"+oc.bg; }
+
 			var cacheel = this.cache[ index ];
 			var fsw = this.fontSizeIntW;
 			var fsh = this.fontSizeIntH;
@@ -705,6 +766,13 @@ showInner() {
 
 					ctx.putImageData( imgdata, 0, 0);
 				}
+/*				else if ( code==32 && oc.bg==0 ) {
+//this.ctx.drawImage( cacheel.cvs, x, y );
+					this.ctx.clearRect(x, y, fsw, fsh);
+					//ctx.fillRect(  0,0, fsw, fsh);
+					return;
+				}
+*/
 				else {
 					ctx.font =  this.fontSizeCSS + " " + this.fontFamily;
 					ctx.textBaseline = "top";
@@ -719,7 +787,6 @@ showInner() {
 
 					ctx.fillStyle = this.colors.fgHTML;
 					ctx.fillText( ch , off, 0);
-
 
 				}
 

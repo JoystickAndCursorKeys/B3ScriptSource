@@ -45,7 +45,18 @@ class BitMap {
 
   triggerFlush() {
 
-    this._int_flush();
+		if( !this.changes.flag ) {
+			return;
+		}
+
+		this.sys.post( "gfxupdate",
+			{
+				pixels: this.changes.pixels
+			}
+		);
+
+		this.changes.pixels = [];
+		this.changes.flag = false;
 
   }
 
@@ -58,10 +69,10 @@ class BitMap {
           pixels: this.changes.pixels
         }
       );
-    }
 
-    pixels: this.changes.pixels = [];
-    this.changes.flag = false;
+			this.changes.pixels = [];
+			this.changes.flag = false;
+    }
 
   }
 

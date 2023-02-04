@@ -222,6 +222,8 @@ class BasicCommands {
         this.runtime.setVar(p0.value, "???" );
       }
     }
+
+    this.runtime.flagInputCommand();
   }
 
   _stat_info_getkey() { return "io:Retrieve the last key pressed::<Key$>"; }
@@ -242,6 +244,8 @@ class BasicCommands {
         this.runtime.setVar(p0.value, k.keyLabel );
       }
     }
+
+    this.runtime.flagInputCommand();
   }
 
   _stat_info_input() { return "io:Waits for the user to type in a value::<Value>"; }
@@ -286,7 +290,12 @@ class BasicCommands {
     this.runtime.restoreDataPtr();
   }
 
-  _stat_info_load() { return "program:Load a program in memory:<Filename>"; }
+  _stat_info_waitms() { return "program:Wait a certain time:<MilliSeconds>"; }
+  _stat_waitms( pars ) {
+    this.runtime.setWaiting( pars[0].value );
+  }
+
+  _stat_info_load() { return "program:Load a program in memory:<FileName>"; }
   _stat_load( pars ) {
     var runtime = this.runtime;
     var result;
@@ -613,7 +622,7 @@ class BasicCommands {
       else {
         con.write( "" + value );
       }
-      if( newLine ) { con.nl(); }
+      if( newLine ) { con.nl(); runtime.setWaiting( 1 ); }
 
     }
 

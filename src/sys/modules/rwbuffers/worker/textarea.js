@@ -818,6 +818,10 @@ class TextArea {
 	}
 
 
+	setFilter( f ) {
+		this.sys.post( "gfilter", { d: f }  );
+	}
+
 	_int_control( chr, data ) {
 
 		if( chr == 16 ) {
@@ -867,8 +871,9 @@ class TextArea {
 
 		if( x>=this.acols || y>= this.arows ) { throw "pos("+x+","+y+") > max" ; }
 
-		this.x = x + this.ax0;
-		this.y = y + this.ay0;
+		if( ! ( x === undefined ) ) { this.x = x + this.ax0; }
+		if( ! ( y === undefined ) ) { this.y = y + this.ay0; }
+
 
 		this._int_flush();
 	}

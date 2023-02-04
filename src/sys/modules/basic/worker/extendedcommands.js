@@ -642,7 +642,7 @@ class ExtendedCommands {
   _stat_info_locate() { return "print:Set the cursor position:<Y>,<X>"; }
   _stat_locate( pars ) {
 
-    var row = -1, col = -1;
+    var row = undefined, col = undefined;
 
     if( pars.length > 2 ) {
       this.erh.throwError( "too many parameters", "expected max 2, not " + pars.length );
@@ -827,6 +827,22 @@ class ExtendedCommands {
     this.runtime.flagStatusChange();
     this.runtime.startWaitForMessage( "displaysize" )
 
+
+  }
+
+
+  _stat_info_gfilter() { return "experimental:Add a html filter to the display:<FilterString>"; }
+  _stat_gfilter( pars ) {
+
+    var result;
+
+    if( pars.length != 1) {
+        this.erh.throwError( "too many variables", "expected one parameter only" );
+    }
+
+    var filter = pars[0].value;
+   
+    this.output.setFilter( filter );
 
   }
 

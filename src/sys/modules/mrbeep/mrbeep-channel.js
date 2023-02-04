@@ -11,10 +11,10 @@ class MrBeepChannel {
 
     this.effects = [];
 
-    this.FLR = 10;
-    this.FS = 11;
-    this.VLR = 20;
-    this.VS = 21;
+    this.FLR = 10;  //frequency linair range
+    this.FS = 11;   //frequency set
+    this.VLR = 20;  //volume linair range
+    this.VS = 21;   //volume set
 
   }
 
@@ -51,6 +51,7 @@ class MrBeepChannel {
       //var geometricMean = Math.sqrt(from * to);
       //this.filter.Q.value = geometricMean / (to - from);
 
+      /*
       this.filter = this.audioCtx.createBiquadFilter();
 
       this.filter.type = "bandpass";
@@ -87,7 +88,7 @@ class MrBeepChannel {
       this.gain.gain.setValueAtTime(0, this.audioCtx.currentTime);
 
       this.initializedFully = true;
-
+      */
 
     }
     else {

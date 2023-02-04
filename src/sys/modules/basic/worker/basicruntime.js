@@ -19,12 +19,16 @@ class BasicRuntime {
 
     this.program = [];
     this.runFlag = false;
+    this.isWaitingFlag = false;
+    this.waitingTime = 0;
+
     this.waitForMessageFlag = false;
     this.waitForMessageVariable = null;
     this.executeLineFlag = false;
     this.goPlayExampleFlag = false;
-    this.breakCycleFlag;
+
     this.inputFlag = false;
+    this.inputCommand = false;
     this.listFlag = false;
     this.immersiveFlag = false;
     this.statusChanged = false;
@@ -33,7 +37,7 @@ class BasicRuntime {
     this.nullTime = new Date().getTime();
 
     this.turboMode = false;
-    this.cmdCountPerCycleDefault = 10000;
+    this.cmdCountPerCycleDefault = 20000;
     this.cmdCountPerCycleTurbo = 20000;
     this.cmdCountPerCycle = this.cmdCountPerCycleDefault ;
 
@@ -136,6 +140,23 @@ class BasicRuntime {
     this.statusChanged = true;
   }
 
+  clearInputCommand() {  /* for GET and GETKEY, for input we use something else */
+    this.inputCommand = false;
+  }
+
+  flagInputCommand() {  /* for GET and GETKEY, for input we use something else */
+    this.inputCommand = true;
+  }
+
+  setWaiting( time ) {  /* for GET and GETKEY, for input we use something else */
+    this.isWaitingFlag = true;
+    this.waitingTime = time;
+  }
+
+  clearWaiting() {  /* for GET and GETKEY, for input we use something else */
+    this.isWaitingFlag = false;
+  }
+
 
   getScopeVars( s ) {
     return s.vars;
@@ -200,7 +221,10 @@ class BasicRuntime {
   }
 
   cpuNeeded() {
-    return this.runFlag;
+    if (this.runFlag ) { return 1; }
+    else if (this.listFlag ) { return .8; }
+    return .1;
+
   }
 
   getStatus() {
@@ -606,6 +630,7 @@ class BasicRuntime {
 
   HandleStopped( startingProgram ) {
 
+    this.clearWaiting();
     this.input.setInterActive( true);
     this.input.flush();
     if( !startingProgram && this.menuEnable ) {
@@ -1428,12 +1453,6 @@ class BasicRuntime {
 
   }
 
-  breakCycle() {
-    this.breakCycleFlag = true;
-  }
-
-
-
   cycle() {
 
     /*return values*/
@@ -1443,6 +1462,7 @@ class BasicRuntime {
     var MIDLINE_INTERUPT = 20;
     var TERMINATE_W_JUMP = 30;
     var PAUSE_F_INPUT = 40;
+    var WAIT_SPECIFIC_TIME = 50;
 
     var c = this.output;
 
@@ -1485,12 +1505,8 @@ class BasicRuntime {
 
 
           if( this.waitForMessageFlag ) {
-              return this.statusChanged;
-          }
-
-          if( this.breakCycleFlag ) {
-            this.breakCycleFlag = false;
-            break;
+              break;
+              //return this.statusChanged;
           }
 
           if(this.debugFlag) console.log("START CYCLE LOOP-------------" );
@@ -1557,7 +1573,8 @@ class BasicRuntime {
               console.log("FUNCTION DUMP:", this.functions );
             }
             if(this.debugFlag) console.log("CYCLE RETURN END");
-            return this.statusChanged;
+            //return this.statusChanged;
+            break;
           }
           else if( rv[0] == LINE_FINISHED ) {
             this.runPointer ++;
@@ -1589,6 +1606,13 @@ class BasicRuntime {
 
             this.runPointer2 = af;
             if(this.debugFlag) console.log("CYCLE PAUSE 4 INPUT" + this.runPointer + "," + this.runPointer2);
+            break;
+
+          }
+          else if( rv[0] == WAIT_SPECIFIC_TIME ) {
+
+            this.runPointer2 = af;
+            if(this.debugFlag) console.log("CYCLE PAUSE 4 SPECIFIC TIME" + this.runPointer + "," + this.runPointer2);
             break;
 
           }
@@ -1657,7 +1681,15 @@ class BasicRuntime {
 
     }
 
-    return this.statusChanged;
+    var pi = this.procIf;
+
+    var cstate = pi.STATE_CLI;
+
+    if( this.isWaitingFlag  ) { cstate = pi.STATE_WAITING ;}
+    else if( this.inputFlag  ) { cstate = pi.STATE_INPUT ;}
+    else if( this.runFlag | this.listFlag ) { cstate = pi.STATE_RUNNING; }
+
+    return [ this.statusChanged, cstate, this.waitingTime ];
   }
 
   doReturn() {
@@ -2329,6 +2361,8 @@ class BasicRuntime {
     if( this.program.length > 0) {
       this.runFlag = true;
       this.inputFlag = false;
+      this.waitingTime = 0;
+      this.isWaitingFlag = false;
       this.runPointer = 0;
       this.runPointer2 = 0;
       this.waitForMessageFlag = false;
@@ -2339,6 +2373,8 @@ class BasicRuntime {
     else {
       this.runFlag = false;
       this.inputFlag = false;
+      this.waitingTime = 0;
+      this.isWaitingFlag = false;
       this.runPointer = 0;
       this.runPointer2 = 0;
       this.waitForMessageFlag = false;
@@ -2499,6 +2535,7 @@ class BasicRuntime {
     var MIDLINE_INTERUPT = 20;
     var TERMINATE_W_JUMP = 30;
     var PAUSE_F_INPUT = 40;
+    var WAIT_SPECIFIC_TIME = 50;
 
     var end = cmds.length;
     var i=this.runPointer2;
@@ -2511,31 +2548,17 @@ class BasicRuntime {
       limit = 9999; //reaching to infinite (max on line maybe  40)
     }
 
-
-
     while( i<end && cnt<limit ) {
 
-
-      if( this.breakCycleFlag ) {
-        if(!(limit == undefined )) {
-          this.breakCycleFlag = false;
-          break;
-        }
-      }
 
       var cmd=cmds[i];
 
       var l=this.program[this.runPointer];
       if( l ) {
-        //console.log( l[0] );
         if(parseInt(l[0]) == 3155 ) {
           console.log("bump");
         }
       }
-      //if( this.runPointer > -1 ) {
-      //  console.log( l[0] + "(" + this.runPointer + ":" + i +")" + this.commandToString( cmd ) );
-      //}
-      //console.log( cmd.lineNumber + ":" + cmd.type + ":" + (cmd.controlKW ? cmd.controlKW : cmd.statementName ));
 
       if( cmd.type == "control" )  {
         var cn = cmd.controlKW;
@@ -2752,9 +2775,16 @@ class BasicRuntime {
             return [END_W_ERROR,i+1,cnt+1];
           }
           else {
+
+              this.inputCommand  = false;
+
               mycommands[ "_stat_" + cmd.statementName.toLowerCase()]( values );
-              if( this.inputFlag ) {
+
+              if( this.inputFlag ) {  //}|| this.inputCommand ) {
                 return [PAUSE_F_INPUT,i+1,cnt+1];
+              }
+              else if ( this.isWaitingFlag )  {
+                return [WAIT_SPECIFIC_TIME,i+1,cnt+1];
               }
           }
 
@@ -2781,13 +2811,14 @@ class BasicRuntime {
         if( cmd.arrayAssignment ) {
           var varIntName = "@array_" + cmd.var;
           if( this.vars[ varIntName ] === undefined ) {
-            this.printError("bad subscript");
+            this.printError("bad subscript",false, false, "No such Array");
+            //printError( s, supressLine, explicitline, detail ) {
             return [END_W_ERROR,i+1,cnt];
           }
 
           var arr = this.vars[ varIntName ];
           if( cmd.indices.length != arr.getIndexCount() ) {
-            this.printError("bad subscript");
+            this.printError("bad subscript",false, false, "Wrong dimensions");
             return [END_W_ERROR,i+1,cnt];
           }
 

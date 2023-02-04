@@ -154,6 +154,11 @@ class KERNALMODULE {
           document.body.style.backgroundColor = con.htmlColor( m.d );
 
         }
+        else if( t == "gfilter" ) {
+
+          con.gfilter( m.d );
+
+        }        
         else if( t == "audio" ) {
 
           _parent.audioInit();
