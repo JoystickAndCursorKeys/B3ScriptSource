@@ -12,7 +12,7 @@ cp src/icon.png dist/static/icon.png
 #cp src/icon.png dist/static_embed/icon.png
 
 echo Linking worker files...
-node script/packworker.js
+node build/packworker.js
 
 echo Making bundles...
 npx webpack --stats-error-details
