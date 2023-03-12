@@ -118,19 +118,19 @@ class COMMONBOOTLOADER {
     sys.log = function() {
       var args = Array.prototype.slice.call(arguments);
       sys.rawlog( "info", args );
-      console.log.apply(console, args);
+      //console.log.apply(console, args);
     }
 
     sys.logwarn = function() {
       var args = Array.prototype.slice.call(arguments);
       sys.rawlog( "warn", args );
-      console.warn(args);
+      //console.warn(args);
     }
 
     sys.logerr = function() {
       var args = Array.prototype.slice.call(arguments);
       sys.rawlog( "error", args );
-      console.error.apply(console, args);
+      //console.error.apply(console, args);
     }
 
     this.logerr = sys.logerr;

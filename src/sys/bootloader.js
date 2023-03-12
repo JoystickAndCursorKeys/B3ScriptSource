@@ -148,7 +148,7 @@ boot.loadScript = (name, url0, loadedHandler, destination, dependencies ) => {
 function sysInit( stage ) {
 
   console.log("SYSINIT:" + stage );
-  if( stage == "tablecon#after" || stage == "canvas#after"  ) {
+  if( stage == "tablecon#after" || stage == "canvas#after"  || stage == "webgl#after" ) {
 
     if( !boot.bootDebug ) {
       sys.nulcon = [];
@@ -242,6 +242,10 @@ var canvas = {
   name: "Canvas Device", url: "canvas/module.js",  destination: "canvas"
 };
 
+var webglt = {
+  name: "WebGL Tiled Device", url: "webglt/module.js",  destination: "webglt"
+};
+
 var simplewarning = {
   name: "Warning Device", url: "simplewarning.js",  destination: "simplewarning"
 };
@@ -317,6 +321,7 @@ boot.sequence = [
     basicmenu,
     tablecon,
     canvas,
+    //webglt,    
     simplewarning,
     mutedinput,
     domelinput,

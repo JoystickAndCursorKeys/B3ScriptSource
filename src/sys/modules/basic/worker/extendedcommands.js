@@ -3,6 +3,7 @@ class ExtendedCommands {
   constructor( basicCmds, runtime ) {
     this.output = runtime.output;
     this.bitmap = runtime.bitmap;
+    this.playfields = runtime.playfields;
     this.audio = runtime.audio;
     this.html = runtime.html;
     this.input = runtime.input;
@@ -452,7 +453,7 @@ class ExtendedCommands {
 
     if( pars.length == 1) {
         var col = Math.round( pars[0].value );
-        if( col > 0 && col < 16) {
+        if( col > 0 && col < 32) {
             this.bitmap.setLineColor(  col );
         }
         return
@@ -460,7 +461,25 @@ class ExtendedCommands {
 
   }
 
+  _stat_info_fcolor() { return "graphics:Set graphics fill color index:<Color Index>"; }
+  _stat_fcolor( pars ) {
 
+    var result;
+
+    if( pars.length != 1) {
+      this.erh.throwError( "parameter count", "expected color" );
+      return
+    }
+
+    if( pars.length == 1) {
+        var col = Math.round( pars[0].value );
+        if( col > 0 && col < 32) {
+            this.bitmap.setFillColor(  col );
+        }
+        return
+    }
+
+  }
 
   _stat_info_origin() { return "graphics:Specify origin of graphics console:<X0>,<Y0>,<Dx>,<Dy>"; }
   _stat_origin( pars ) {
@@ -495,8 +514,8 @@ class ExtendedCommands {
 
   _stat_info_line() { return "graphics:Draw a line:<X0>,<Y0>,<X1>,<Y1>"; }
   _stat_line( pars ) {
-    if( pars.length != 4 ) {
-      this.erh.throwError( "parameter count", "expected 2 (x0,y0,y1,y1), not " + pars.length );
+    if( pars.length != 4 && pars.length != 2 ) {
+      this.erh.throwError( "parameter count", "expected 2 or 4 ([x0,y0,] y1,y1), not " + pars.length );
       return;
     }
 
@@ -505,7 +524,38 @@ class ExtendedCommands {
       return;
     }
 
+    if( pars.length == 2 ) {
+
+      this.bitmap.line(
+        undefined, undefined,
+        pars[0].value,
+        pars[1].value
+      );
+      return;
+    }
+
     this.bitmap.line(
+      pars[0].value,
+      pars[1].value,
+      pars[2].value,
+      pars[3].value
+
+    );
+  }
+
+  _stat_info_box() { return "graphics:Draw a filled rectangle:<X>,<Y>,<W>,<H>"; }
+  _stat_box( pars ) {
+    if( pars.length != 4 ) {
+      this.erh.throwError( "parameter count", "expected 4 (x,y,w,h), not " + pars.length );
+      return;
+    }
+
+    if( !this.bitmap.isActive() ) {
+      this.erh.throwError( "invalid display mode", "current mode cannot show graphics" );
+      return;
+    }
+
+    this.bitmap.fillRect(
       pars[0].value,
       pars[1].value,
       pars[2].value,
@@ -529,23 +579,87 @@ class ExtendedCommands {
     this.bitmap.plot( pars[0].value, pars[1].value );
   }
 
-  _stat_info_center() { return "print:Print horizontal center:<StringToPrint>"; }
+  
+_if_center() {
+    var EXPR = 0, PAR = 1, RAW=2;
+    return [RAW];
+}
+
+isNumber(value) {
+  return typeof value === 'number' && isFinite(value);
+}
+
+normalizeIfNumber( x )  {
+  if( this.isNumber( x ) ) {
+    if ( x >= 0 ) {
+      return " " + x;
+    }
+  }
+  return "" + x;
+}
+
+
+  _stat_info_center() { return "print:Print center text or values to the console:<Value>[;<Value>][;]"; }
   _stat_center( pars ) {
 
-    var string;
-
-    if( pars.length > 1 ) {
-      this.erh.throwError( "too many parameters", "expected max 2, not " + pars.length );
-      return;
-    }
+    var runtime = this.runtime;
+    var con= this.output;
 
     if( pars.length == 0 ) {
+      con.nl();
       return;
     }
+    else if( pars.length == 1 ) {
+      if( pars[0].parts.length == 0 ) {
+        con.nl();
+        return;
+      }
+    }
 
-    string = pars[0].value;
+    var newLine = true;
+    var value;
+    for( var i=0; i<pars.length; i++) {
 
-    this.output.center( string );
+      newLine = true;
+      if( i<(pars.length-1)) {
+        newLine = false;
+      }
+
+      if( i>0) {
+        con.write( "         " );
+      }
+
+      var exparts = pars[i];
+      var exparts2=
+        { parts: [],
+          binaryNegate: exparts.binaryNegate,
+          negate: exparts.negate  };
+
+      for( var j=0; j<exparts.parts.length; j++) {
+        if( exparts.parts[j].type == "uniop" &&
+            exparts.parts[j].op == ";" && j==(exparts.parts.length-1)
+            && (i == pars.length-1)) {
+              //console.log( "i="+i+" newline: set to false");
+          newLine = false;
+        }
+        else {
+          exparts2.parts.push( exparts.parts[j] );
+        }
+      }
+
+      value = runtime.evalExpression( exparts2 );
+
+      if( i == 0) {
+        //this.output.center( string, inhibitNL );
+        con.center( this.normalizeIfNumber( value ), true );
+      }
+      else {
+        con.center( "" + value , true);
+      }
+      if( newLine ) { con.nl(); runtime.setWaiting( 1 ); }
+
+    }
+
   }
 
 
@@ -637,6 +751,156 @@ class ExtendedCommands {
     }
 
     this.output.pokecl( pars[0].value, pars[1].value, undefined, pars[2].value );
+  }
+
+
+  _int_checkPlayfieldNo( no ) {
+
+    if( no != 0 && 
+        no != 1 &&
+        no != 2 &&
+        no != 3 &&
+        no != 4 &&
+        no != 5 
+         ) {
+      this.erh.throwError( "parameters", "Value must be 0,1,2,3,4 or 5" );
+      return;
+    }
+  }
+
+
+
+ _stat_info_pfinit() { 
+      return  "playfield:(re)Initialize of playfield buffer: <pfIndex>, <Cols>, <Rows>"; 
+    }
+
+  _stat_pfinit( pars ) {
+
+    if( !this.playfields.enabled() ) {
+      this.erh.throwError( "invalid display mode", "current mode does not have playfields" );
+      return;
+    }
+
+    if( pars.length != 3 ) {
+      this.erh.throwError( "parameters", "expected 3 parameters, not " + pars.length );
+      return;
+    }
+
+    this._int_checkPlayfieldNo( pars[0].value );
+
+    this.playfields.init( 
+        this.runtime.processId,
+        pars[0].value, 
+        0,0, 
+        pars[1].value, pars[2].value,
+        pars[1].value, pars[2].value 
+    );
+
+    this.runtime.startWaitForMessage( "pfinit" )
+  }
+
+  _stat_info_playfield() { return "playfield:Select current playfield:<Nr> ; 0 to 3"; }
+  _stat_playfield( pars ) {
+
+    if( !this.playfields.enabled() ) {
+      this.erh.throwError( "invalid display mode", "current mode does not have playfields" );
+      return;
+    }
+
+    if( pars.length != 1 ) {
+      this.erh.throwError( "parameters", "expected 1 parameter, not " + pars.length );
+      return;
+    }
+
+    this._int_checkPlayfieldNo( pars[0].value );
+
+    this.playfields.select( 
+              this.runtime.processId,
+              pars[0].value );
+    this.runtime.startWaitForMessage( "pfselect" );
+  }
+
+  _stat_info_pfscroll() { 
+      return  "playfield:Set scroll pos of playfield view: <pfIndex>, <sX>, <sY>"; 
+    }
+
+  _stat_pfscroll( pars ) {
+
+    if( !this.playfields.enabled() ) {
+      this.erh.throwError( "invalid display mode", "current mode does not have playfields" );
+      return;
+    }
+
+    if( pars.length != 3 ) {
+      this.erh.throwError( "parameters", "expected 3 parameters, not " + pars.length );
+      return;
+    }
+
+    this._int_checkPlayfieldNo( pars[0].value );
+
+    this.playfields.scrollpos( 
+        this.runtime.processId,
+        pars[0].value, 
+        pars[1].value, pars[2].value
+    );
+
+  }
+
+  _stat_info_pfview() { 
+      return  "playfield:Initialize size of playfield view: <pfIndex>, <X>, <Y>, <W>, <H>"; 
+    }
+
+  _stat_pfview( pars ) {
+
+    if( !this.playfields.enabled() ) {
+      this.erh.throwError( "invalid display mode", "current mode does not have playfields" );
+      return;
+    }
+
+    if( pars.length != 5 ) {
+      this.erh.throwError( "parameters", "expected 5 parameters, not " + pars.length );
+      return;
+    }
+
+    this._int_checkPlayfieldNo( pars[0].value );
+
+    this.playfields.viewdefine( 
+        this.runtime.processId,
+        pars[0].value, 
+        pars[1].value, pars[2].value,
+        pars[3].value, pars[4].value
+    );
+
+  }
+
+
+ 
+
+
+  _stat_info_pfenable() { 
+      return  "playfield:Enable  a playfield to be visible: <pfIndex>, <OnOfFlag>"; 
+    }
+
+  _stat_pfenable( pars ) {
+
+    if( !this.playfields.enabled() ) {
+      this.erh.throwError( "invalid display mode", "current mode does not have playfields" );
+      return;
+    }
+
+    if( pars.length != 2 ) {
+      this.erh.throwError( "parameters", "expected 2 parameters, not " + pars.length );
+      return;
+    }
+
+    this._int_checkPlayfieldNo( pars[0].value );
+
+    this.playfields.setEnable( 
+        this.runtime.processId,
+        pars[0].value, 
+        pars[1].value
+    );
+
   }
 
   _stat_info_locate() { return "print:Set the cursor position:<Y>,<X>"; }

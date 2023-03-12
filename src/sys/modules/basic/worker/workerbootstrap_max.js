@@ -24,6 +24,7 @@ try {
   importScripts(
     "../../rwbuffers/worker/audio.js",
     "../../rwbuffers/worker/textarea.js",
+    "../../rwbuffers/worker/playfields.js",
     "../../rwbuffers/worker/bitmap.js"
   );
 }

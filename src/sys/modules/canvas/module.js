@@ -32,8 +32,6 @@ class KERNALMODULE {
 
 		];
 
-
-
 		var pad2 = function( hs ) {
 			var rv = hs;
 			while ( rv.length < 2 ) {
@@ -110,6 +108,9 @@ class KERNALMODULE {
 		return this.palette[ ix ];
 	}
 
+	getPlayFields() {
+		return null;
+	}
 
 	destroy() {
 		this.outDiv0.remove();
@@ -344,7 +345,7 @@ class KERNALMODULE {
 		this.cvs.hidden = true;
 	}
 
-showInner() {
+	showInner() {
 		this.cvs.hidden = false;
 	}
 
@@ -802,7 +803,12 @@ showInner() {
 				var htmlCol = this.palette[ params.c ];
 				var ctx = this.ctx;
 				ctx.strokeStyle = htmlCol;
+		}
 
+		op_fcolor( params ) {
+				var htmlCol = this.palette[ params.c ];
+				var ctx = this.ctx;
+				ctx.fillStyle = htmlCol;
 		}
 
 
@@ -815,7 +821,7 @@ showInner() {
 			var x0 =params.x0;
 			var y0 =params.y0;
 			if( x0 < 0) {
-				x0=this.cX;
+				x0=this.cX;  /* cX and cY allow to add next line with only one coordinate */
 			}
 			if( y0 < 0) {
 				y0=this.cY;
@@ -828,6 +834,42 @@ showInner() {
 
 			this.cX = params.x1;
 			this.cY = params.y1;
+
+		}
+
+
+		op_fillRect( params ) {
+
+			//TODO be consitent on where boundary checks are done
+			//what about view port?
+			this.updCtxImageData.synched = false;
+
+			var ctx = this.ctx;
+
+			var x =params.x;
+			var y =params.y;
+			var w =params.w;
+			var h =params.h;
+
+			if( x < 0) {
+				x=0;
+			}
+			if( y < 0) {
+				y=0;
+			}
+
+			var xoverflow = -(this.width -  (x+(w)));
+			var yoverflow = -(this.height - (y+(h)));
+
+			if( xoverflow > 0) {
+				w = this.width - x;
+			}
+
+			if( yoverflow > 0) {
+				h = this.height - h;
+			}
+
+			ctx.fillRect(x, y, w, h);
 
 		}
 
@@ -969,10 +1011,9 @@ showInner() {
 	}
 
 	writeln( str ) {
-			this._int_blinkOff();
+			//this._int_blinkOff();
 			this.show();
-			//console.log( "writeln" + str );
-
+			
 			for (const c of str) {
 			  this.__int_write_direct_ch( c );
 			}

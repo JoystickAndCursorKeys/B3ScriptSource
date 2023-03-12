@@ -47,6 +47,9 @@ class KERNALMODULE {
 		return this.htmlPalette[ ix ];
 	}
 
+	getPlayFields() {
+		return null;
+	}
 
 	destroy() {
 			this.outDiv0.remove();

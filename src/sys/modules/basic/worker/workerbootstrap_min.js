@@ -6,6 +6,7 @@ sys.log("Starting");
 try {
   importScripts(
     "../rwbuffers/worker/textarea.js",
+    "../rwbuffers/worker/playfields.js",
     "../rwbuffers/worker/bitmap.js",
     "processes.js",
     "basictokenizer.js",

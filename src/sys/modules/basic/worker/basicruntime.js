@@ -10,6 +10,7 @@ class BasicRuntime {
 
     this.output = sys.out;
     this.bitmap = sys.bout;
+    this.playfields = sys.pfields;    
     this.input = sys.input;
     this.audio = sys.audio;
     this.input.setHandler( this );
@@ -392,12 +393,37 @@ class BasicRuntime {
     this.vars[ this.waitForMessageVariable ] = _message;
     this.waitForMessageFlag = false;
 
-    if( _message.startsWith( "displaysize:" )) {
+    if( _message.startsWith( "displaymode:" )) {
         this.output.reInit( _data.textW, _data.textH );
         this.bitmap.reInit( _data.bitmapW, _data.bitmapH );
-        this.sys.displayMode = _data.mode;
+        //this.playfields.reInit( _data.playfields );
+        this.sys.displayMode = _data.mode;    
+        this.playfields.enable( _data.pfEnabled ); 
+        this.playfields.set( _data.playfields ); 
+        
 
     }
+    else if( _message.startsWith( "pfinit:current:" )) {
+        /*
+            Reinit current playfield
+            Other ones are only stored in webworker
+
+        */
+        
+        this.output.set( _data.textW, _data.textH, _data.cells );
+        this.playfields.set( _data.playfields );
+
+    }
+    else if( _message.startsWith( "pfinit:other:" )) {
+        
+        this.playfields.set( _data.playfields );
+    
+    }
+    else if( _message.startsWith( "pfselect:" )) {
+        
+        this.output.set( _data.textW, _data.textH, _data.cells );
+    
+    }    
     else if( _message == "load:error" ) {
 
       if( this.runFlag == false ) {

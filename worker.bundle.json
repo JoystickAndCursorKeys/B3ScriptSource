@@ -9,6 +9,7 @@
           "basicarray.js",   "basicerrorhandler.js",   "coding/codingeditor.js",  "basicruntime.js",    "extendedcommands.js",  "pgmmanager.js",
           "basiccommands.js",  "basicparser.js",  "basictokenizer.js",  "input.js",  "processes.js", "commandhelp.js",
           "../../rwbuffers/worker/textarea.js",
+          "../../rwbuffers/worker/playfields.js",
           "../../rwbuffers/worker/bitmap.js",
           "../../rwbuffers/worker/audio.js",
           "workerbootstrap_static.js"

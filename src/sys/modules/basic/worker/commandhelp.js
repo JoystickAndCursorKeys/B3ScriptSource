@@ -27,8 +27,13 @@ class CommandHelp {
       var si = rname.replace("_stat_","_stat_info_");
 
       var catlabel;
-      if( !( clazz[ si ] === undefined ) ) { catlabel = clazz[ si ](); }
-      else { catlabel = "general"; }
+      if( !( clazz[ si ] === undefined ) )  { 
+          catlabel = clazz[ si ](); 
+          var tmp=12;
+      }
+      else { 
+        catlabel = "general"; 
+      }
 
       var f_attribs = {};
       if( catlabel.indexOf(":") >0 ) {

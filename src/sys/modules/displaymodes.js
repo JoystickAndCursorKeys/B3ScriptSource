@@ -17,6 +17,7 @@ class KERNALMODULE {
 
 			this.drivers["text"] = this.sys.m.tablecon;
 			this.drivers["canvas"] = this.sys.m.canvas;
+			//this.drivers["webglt"] = this.sys.m.webglt;			
 
 			this.modes = [];
 
@@ -69,6 +70,46 @@ class KERNALMODULE {
 			this.modes[505] = "canvas:320x400";
 			this.modes[506] = "canvas:320x256";
 			this.modes[507] = "canvas:320x200";
+
+			//this.modes[1000] = "webgl:1024x768";
+
+			//this.modes[1002] = "webglt:24x16x32";
+			//this.modes[1003] = "webglt:24x16x48";
+			//this.modes[1004] = "webglt:24x16x64";
+
+			//this.modes[1010] = "webglt:32x24x32";
+			//this.modes[1011] = "webglt:32x24x48";
+			//this.modes[1012] = "webglt:32x24x64";
+
+			//this.modes[1020] = "webglt:48x32x16";
+			//this.modes[1021] = "webglt:48x32x24";
+			//this.modes[1022] = "webglt:48x32x32";
+
+
+			//this.modes[1001] = "webgl:%85";
+			//this.modes[1002] = "webgl:%75";
+			//this.modes[1003] = "webgl:%65";
+			//this.modes[1004] = "webgl:%45";
+			//this.modes[1005] = "webgl:%35";
+			//this.modes[1006] = "webgl:%25";
+			//this.modes[1007] = "webgl:%15";
+
+			//this.modes[1110] = "webgl:%%95,25";
+			//this.modes[1111] = "webgl:%%95,50";
+			//this.modes[1120] = "webgl:%%25,95";
+			//this.modes[1121] = "webgl:%%50,95";
+
+			//this.modes[1200] = "webgl:1024x768";
+
+			//this.modes[1500] = "webgl:800x600";
+			//this.modes[1501] = "webgl:640x512";
+			//this.modes[1502] = "webgl:640x480";
+			//this.modes[1503] = "webgl:640x400";
+			//this.modes[1504] = "webgl:320x512";
+			//this.modes[1505] = "webgl:320x400";
+			//this.modes[1506] = "webgl:320x256";
+			//this.modes[1507] = "webgl:320x200";
+
 
 			this.menuCreated = false;
 	}

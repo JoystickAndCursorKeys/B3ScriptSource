@@ -26,39 +26,42 @@ class TextArea {
 		this.changes = { all: false, list: [] };
 		this.pokeFlush = true;
 
-
 		//this.textArea( this.cols , this.rows , -1, -1 );
 	}
 
 	isActive() {
-    return this.initialized && !this.hidden;
-  }
+    	return this.initialized && !this.hidden;
+  	}
 
 	reInit( w, h ) {
 		this._int_initMode( w, h );
 	}
 
+	set( w, h, cells ) {
+		this._int_initMode( w, h );
+		this._int_setCells( cells );
+
+	}
 
 	destroy() {
+		this.cellel = undefined;
 
-			this.cellel = undefined;
-
-			this.changes = { all: false, list: [] };
-			this.initialized = false;
-		}
+		this.changes = { all: false, list: [] };
+		this.initialized = false;
+	}
 
 
   /* Adding changes, to be posted to MT throught flush */
 	_int_addChangeAll() {
 
-		 this.changes.all = true;
-		 this.changes.list = [];
+		this.changes.all = true;
+		this.changes.list = [];
 
 	 }
 
 
 
-	 changeCount() {
+	changeCount() {
 		 if( this.changes.all ) { return 65535; }
 		 return this.changes.list.length;
 	 }
@@ -66,69 +69,69 @@ class TextArea {
 	/* Adding single change, to be posted to MT throught flush */
 	_int_addChange( area ) {
 
-			if(  this.changes.all ) {
-				if( this.changes.list.length > 0 ) {
-						this.changes.list = [];
-				}
-				return;
+		if(  this.changes.all ) {
+			if( this.changes.list.length > 0 ) {
+					this.changes.list = [];
 			}
+			return;
+		}
 
-			var clist = this.changes.list;
-			if( clist.length > 0 ) {
-				var lc = clist[ clist.length -1 ];
-				var nc = area;
-				if( lc.y1 == lc.y2 && nc.y1 == nc.y2 && lc.y1 == nc.y1) {
-					if( nc.x1 == lc.x2 +1 ) {
-							var x2 = lc.x2;
-							var temp=1;
-							var changesTargetArray = lc.cells[0];
-							for( var i=0; i<area.cells[0].length; i++) {
-								var cell = area.cells[0][i];
-								changesTargetArray.push( cell );
-							}
-							lc.x2 = nc.x2;
-							return;
-					}
+		var clist = this.changes.list;
+		if( clist.length > 0 ) {
+			var lc = clist[ clist.length -1 ];
+			var nc = area;
+			if( lc.y1 == lc.y2 && nc.y1 == nc.y2 && lc.y1 == nc.y1) {
+				if( nc.x1 == lc.x2 +1 ) {
+						var x2 = lc.x2;
+						var temp=1;
+						var changesTargetArray = lc.cells[0];
+						for( var i=0; i<area.cells[0].length; i++) {
+							var cell = area.cells[0][i];
+							changesTargetArray.push( cell );
+						}
+						lc.x2 = nc.x2;
+						return;
 				}
 			}
+		}
 
-		 	this.changes.list.push( area );
+		this.changes.list.push( area );
 
 	 }
 
 	 /* Force flush to MT the whole buffer */
 	_int_flushAll() {
-			this.changes.all = true;
-			this.changes.list = [];
+		this.changes.all = true;
+		this.changes.list = [];
 
-			this._int_flush();
+		this._int_flush();
+	}
 
-		}
-
-  /* Utility function to prepare input for addChange (which itself prepares for flush )*/
+  	/* Utility function to prepare input for addChange (which itself prepares for flush )*/
 	_int_getArea( x1, y1, x2, y2 ) {
-			var cells = [];
 
-			for( var y=y1; y<=y2; y++) {
-				var row = [];
-				for( var x=x1; x<=x2; x++) {
-					row.push( this.cellel[ y][ x] );
-				}
-				cells.push( row );
+	var cells = [];
+
+	for( var y=y1; y<=y2; y++) {
+			var row = [];
+			for( var x=x1; x<=x2; x++) {
+				row.push( this.cellel[ y][ x] );
 			}
-
-			var area =
-			{
-				 cells: cells,
-				 x1: x1,
-				 y1: y1,
-				 x2: x2,
-				 y2: y2
-			};
-
-			return area;
-
+			cells.push( row );
 		}
+
+		var area =
+		{
+			 cells: cells,
+			 x1: x1,
+			 y1: y1,
+			 x2: x2,
+			 y2: y2
+		};
+
+		return area;
+
+	}
 
    /* Flush local changes to Main Thread for actual display updates*/
 	 _int_flush() {
@@ -176,38 +179,38 @@ class TextArea {
 
 		}
 
-		attach( w, h ) {
-			this._int_initMode( w, h);
-		}
+	attach( w, h ) {
+		this._int_initMode( w, h);
+	}
 
-		setPokeFlush( flag ) {
-		  this.pokeFlush = flag;
-		}
+	setPokeFlush( flag ) {
+	  this.pokeFlush = flag;
+	}
 
 
-		peekc( x, y ) {
+	peekc( x, y ) {
 
-			var cell = this.cellel[y][x];
+		var cell = this.cellel[y][x];
      	return cell.txt.codePointAt(0);
 
+	}
+
+	peekcl( x, y, m ) {
+
+		var cell = this.cellel[y][x];
+
+		if( m== 0 ) {
+			return cell.fg;
 		}
-
-		peekcl( x, y, m ) {
-
-			var cell = this.cellel[y][x];
-
-			if( m== 0 ) {
-				return cell.fg;
-			}
-			else if( m== 1 ) {
-				return cell.bg;
-			}
-			else  {
-				return cell.fg + (16*cell.bg);
-			}
+		else if( m== 1 ) {
+			return cell.bg;
 		}
+		else  {
+			return cell.fg + (16*cell.bg);
+		}
+	}
 
-		pokec( x, y , c ) {
+	pokec( x, y , c ) {
 
 			try {
 				var cell = this.cellel[y][x];
@@ -224,9 +227,9 @@ class TextArea {
 				throw "Cannot pokec to adress (" + x + "," + y + ")";
 			}
 
-		}
+	}
 
-		pokecl( x, y , fg, bg ) {
+	pokecl( x, y , fg, bg ) {
 
 			try {
 				var cell = this.cellel[y][x];
@@ -247,12 +250,12 @@ class TextArea {
 			catch( e ) {
 				throw "Cannot pokec to adress (" + x + "," + y + ")";
 			}
-		}
+	}
 
 
-		pokeccl( x, y , c, fg, bg ) {
+	pokeccl( x, y , c, fg, bg ) {
 
-			try {
+		try {
 				var cell = this.cellel[y][x];
 
 				cell.txt = String.fromCodePoint( c );
@@ -270,40 +273,40 @@ class TextArea {
 					this._int_flush();
 				}
 
-			}
-			catch( e ) {
+		}
+		catch( e ) {
 				throw "Cannot pokec to adress (" + x + "," + y + ")";
-			}
 		}
+	}
 
-		triggerFlush() {
 
-			this._int_flush();
-		}
+	triggerFlush() {
 
-		_int_initMode( w, h ) {
+		this._int_flush();
+	}
 
-			if( this.initialized ) {
+
+	_int_initMode( w, h ) {
+
+		if( this.initialized ) {
 				this.destroy();
-			}
-			var sys = this.sys;
-			//var msgs = sys.init.queuedMessages; TODO, what to do with queued messages
+		}
+		var sys = this.sys;
+		//var msgs = sys.init.queuedMessages; TODO, what to do with queued messages
+		this.x = 0;
+		this.y = 0;
 
-			this.x = 0;
-			this.y = 0;
+		this.rows = h;
+		this.cols = w;
 
-			this.rows = h;
-			this.cols = w;
+		this.textArea( this.cols, this.rows, -1, -1 );
+		this.colors.txtBgColor= this.defaultBG;
+		this.colors.txtColor = this.defaultFG;
 
-			this.textArea( this.cols, this.rows, -1, -1 );
-
-			this.colors.txtBgColor= this.defaultBG;
-			this.colors.txtColor = this.defaultFG;
-
-			this.cellel = [];
-			for( var y=0; y<this.rows; y++) {
-				var rowArray = [];
-				for( var x=0; x<this.cols; x++) {
+		this.cellel = [];
+		for( var y=0; y<this.rows; y++) {
+			var rowArray = [];
+			for( var x=0; x<this.cols; x++) {
 					var cell = {
 						txt: " ",
 						fg: this.colors.txtColor,
@@ -312,20 +315,38 @@ class TextArea {
 					rowArray.push( cell );
 				}
 				this.cellel.push( rowArray );
+		}
+
+		this.changes = { all: true, list: [] };
+		  var _this = this;
+
+		this._int_flushAll();
+
+		this.sys.log("TEXTAREA w Ready.");
+
+		this.initialized = true;
+		this.pokeFlush = true;
+		/* if true then all pokes in "character memory" will be flushed immediately to the */
+		/*main browswer process */
+	}
+
+	_int_setCells( srcCells ) {
+
+		this.cellel = [];
+		for( var y=0; y<this.rows; y++) {
+				var rowArray = [];
+				for( var x=0; x<this.cols; x++) {
+					var cell = {
+						txt: srcCells[ y ][ x ].txt,
+						fg:  srcCells[ y ][ x ].fg,
+						bg:  srcCells[ y ][ x ].bg
+					}
+					rowArray.push( cell );
+				}
+				this.cellel.push( rowArray );
 			}
 
-			this.changes = { all: true, list: [] };
-
- 		  var _this = this;
-
-			this._int_flushAll();
-
-			this.sys.log("TEXTAREA w Ready.");
-
-			this.initialized = true;
-			this.pokeFlush = true;
-			/* if true then all pokes in "character memory" will be flushed immediately to the */
-			/*main browswer process */
+		this.changes = { all: false, list: [] };
 	}
 
 
@@ -894,16 +915,18 @@ class TextArea {
 
 		if(x >= 0) {
 				this.x = x + this.ax0;
+				if( (this.x - this.ax0) >= this.acols ) { this.x = this.acols-1;}
 		}
 		if(y >= 0) {
 				this.y = y + this.ay0;
+				if( (this.y - this.ay0)>= this.arows ) { this.y = this.arows-1;}
 		}
 
-		if( this.x >= this.acols ) { this.x = this.acols-1;}
-		if( this.y >= this.arows ) { this.y = this.arows-1;}
+		
+		
 	}
 
-	center( str ) {
+	center( str, inhibitNewLine ) {
 
 			if( str.length > this.cols ) {
 				return;
@@ -917,8 +940,17 @@ class TextArea {
 			var x = Math.floor( (wh[0] / 2)-l2 );
 			this._int_setPos( x, -1 );
 			this._int_write( str );
-			this.__int_nl();
 
+			if( !inhibitNewLine ) {
+
+				var stat = this.__int_nl();
+				if( stat.scroll ) {
+						this._int_addChangeAll();
+						return;
+				}
+			}
+
+						
 			var area = this._int_getArea( this.ax0, this.y, this.acols-1, this.y );
 			this._int_addChange( area );
 			this._int_flush();

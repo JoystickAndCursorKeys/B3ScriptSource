@@ -84,6 +84,15 @@ class BitMap {
     });
   }
 
+
+	setFillColor( c ) {
+    this.fillColor = c;
+    this.sys.post( "nativeout",{
+      action: "fcolor",
+      params: { c: c }
+    });
+  }
+
 	getConvertFunc( direction ) {
 		var __this = this;
 		if( direction == "xpyp") {
@@ -144,6 +153,17 @@ class BitMap {
     this.sys.post( "nativeout",{
       action: "line",
       params: { x0:xy0[0], y0:xy0[1], x1:xy1[0], y1:xy1[1] }
+    });
+  }
+
+  fillRect( x,y, w, h ) {
+
+		var xy = this._int_convertxy( x, y );
+
+
+    this.sys.post( "nativeout",{
+      action: "fillRect",
+      params: { x:xy[0], y:xy[1], w:w, h }
     });
   }
 

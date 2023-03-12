@@ -1,4 +1,4 @@
-10 sw=60: sh=30 : cx=4: cy=4 : offsetx = 1: offsety = 7
+10 sw=cols()-5: sh=rows() - 10 : cx=4: cy=4 : offsetx = 1: offsety = 7
 15 dc=496: dcol=1:dbgc = 0
 16 guibg = 9
 17 stacksz = 1000
@@ -23,7 +23,7 @@
 1012 wf=ti + 20
 
 1015 sub waitloop
-1016 if ti < wf then goto waitloop
+1016 waitms 100
 1017 getkey KEY$ : if KEY$ = "" then goto paint
 1020 IF KEY$="ArrowUp"    THEN gosub clearcursor: cY=cY-1: cY=RANGE( cY,0,sh-1 ) : gosub drawcursor : goto paint
 1025 IF KEY$="ArrowDown"  THEN gosub clearcursor: cY=cY+1: cY=RANGE( cY,0,sh-1 ) : gosub drawcursor  : goto paint
@@ -76,7 +76,7 @@
 4000 sub selectchar
 4001 color 1,0,10 : cls : scv=dc
 4005 color 1: tx=0: txc=0: ty=0 : locate 2,0: print 256
-4010 for tc = 0 to 255+255
+4010 for tc = 0 to 255+128
 4011 if tx>15 then tx=0: txc=0:ty=ty+1: locate 2+ty,0: print (tc+256)
 4015  pokec txc+5,ty+2,256+tc
 4020  tx=tx+1: txc=txc + 1

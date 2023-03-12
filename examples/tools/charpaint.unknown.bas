@@ -1,4 +1,4 @@
-10 sw=60: sh=30 : cx=4: cy=4 : offsetx = 1: offsety = 7
+10 sw=60: sh=rows()-7 : cx=4: cy=4 : offsetx = 1: offsety = 7
 15 dc=496: dcol=1:dbgc = 0
 16 guibg = 9
 17 stacksz = 1000

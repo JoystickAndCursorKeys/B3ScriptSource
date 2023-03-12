@@ -97,7 +97,6 @@ function init_sys() {
     post( "blinkMode", { m:m } );
   }
 
-
   sys.html = {}
 
   sys.html.executeFunction = function() {
@@ -146,6 +145,7 @@ function start_sys() {
   sys.input = new Input( sys );
   sys.out = new TextArea( sys );
   sys.bout = new BitMap( sys );
+  sys.pfields = new Playfields( sys );
   sys.audio = new Audio( sys );
   sys.rootProcId = -1;
 
@@ -226,7 +226,7 @@ function start_sys() {
         }
         else if( data.type == "systeminfo" ) {
 
-          sys.log( "systeminfo with: " + JSON.stringify( data ) )
+          sys.log( "systeminfo with: " + JSON.stringify( data ).substr(0,50) + "..." );
           sys.screenModes = data.modes;
           sys.displayMode = data.mode;
           sys.windowWidth = data.windowWidth;

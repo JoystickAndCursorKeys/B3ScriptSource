@@ -12,6 +12,7 @@
 //src/sys/modules/basic/worker/processes.js
 //src/sys/modules/basic/worker/commandhelp.js
 //src/sys/modules/basic/worker/../../rwbuffers/worker/textarea.js
+//src/sys/modules/basic/worker/../../rwbuffers/worker/playfields.js
 //src/sys/modules/basic/worker/../../rwbuffers/worker/bitmap.js
 //src/sys/modules/basic/worker/../../rwbuffers/worker/audio.js
 //src/sys/modules/basic/worker/workerbootstrap_static.js
@@ -121,7 +122,6 @@ function init_sys() {
     post( "blinkMode", { m:m } );
   }
 
-
   sys.html = {}
 
   sys.html.executeFunction = function() {
@@ -170,6 +170,7 @@ function start_sys() {
   sys.input = new Input( sys );
   sys.out = new TextArea( sys );
   sys.bout = new BitMap( sys );
+  sys.pfields = new Playfields( sys );
   sys.audio = new Audio( sys );
   sys.rootProcId = -1;
 
@@ -250,7 +251,7 @@ function start_sys() {
         }
         else if( data.type == "systeminfo" ) {
 
-          sys.log( "systeminfo with: " + JSON.stringify( data ) )
+          sys.log( "systeminfo with: " + JSON.stringify( data ).substr(0,50) + "..." );
           sys.screenModes = data.modes;
           sys.displayMode = data.mode;
           sys.windowWidth = data.windowWidth;
@@ -810,6 +811,7 @@ class BasicRuntime {
 
     this.output = sys.out;
     this.bitmap = sys.bout;
+    this.playfields = sys.pfields;    
     this.input = sys.input;
     this.audio = sys.audio;
     this.input.setHandler( this );
@@ -819,12 +821,16 @@ class BasicRuntime {
 
     this.program = [];
     this.runFlag = false;
+    this.isWaitingFlag = false;
+    this.waitingTime = 0;
+
     this.waitForMessageFlag = false;
     this.waitForMessageVariable = null;
     this.executeLineFlag = false;
     this.goPlayExampleFlag = false;
-    this.breakCycleFlag;
+
     this.inputFlag = false;
+    this.inputCommand = false;
     this.listFlag = false;
     this.immersiveFlag = false;
     this.statusChanged = false;
@@ -833,7 +839,7 @@ class BasicRuntime {
     this.nullTime = new Date().getTime();
 
     this.turboMode = false;
-    this.cmdCountPerCycleDefault = 10000;
+    this.cmdCountPerCycleDefault = 20000;
     this.cmdCountPerCycleTurbo = 20000;
     this.cmdCountPerCycle = this.cmdCountPerCycleDefault ;
 
@@ -936,6 +942,23 @@ class BasicRuntime {
     this.statusChanged = true;
   }
 
+  clearInputCommand() {  /* for GET and GETKEY, for input we use something else */
+    this.inputCommand = false;
+  }
+
+  flagInputCommand() {  /* for GET and GETKEY, for input we use something else */
+    this.inputCommand = true;
+  }
+
+  setWaiting( time ) {  /* for GET and GETKEY, for input we use something else */
+    this.isWaitingFlag = true;
+    this.waitingTime = time;
+  }
+
+  clearWaiting() {  /* for GET and GETKEY, for input we use something else */
+    this.isWaitingFlag = false;
+  }
+
 
   getScopeVars( s ) {
     return s.vars;
@@ -1000,7 +1023,10 @@ class BasicRuntime {
   }
 
   cpuNeeded() {
-    return this.runFlag;
+    if (this.runFlag ) { return 1; }
+    else if (this.listFlag ) { return .8; }
+    return .1;
+
   }
 
   getStatus() {
@@ -1168,12 +1194,37 @@ class BasicRuntime {
     this.vars[ this.waitForMessageVariable ] = _message;
     this.waitForMessageFlag = false;
 
-    if( _message.startsWith( "displaysize:" )) {
+    if( _message.startsWith( "displaymode:" )) {
         this.output.reInit( _data.textW, _data.textH );
         this.bitmap.reInit( _data.bitmapW, _data.bitmapH );
-        this.sys.displayMode = _data.mode;
+        //this.playfields.reInit( _data.playfields );
+        this.sys.displayMode = _data.mode;    
+        this.playfields.enable( _data.pfEnabled ); 
+        this.playfields.set( _data.playfields ); 
+        
 
     }
+    else if( _message.startsWith( "pfinit:current:" )) {
+        /*
+            Reinit current playfield
+            Other ones are only stored in webworker
+
+        */
+        
+        this.output.set( _data.textW, _data.textH, _data.cells );
+        this.playfields.set( _data.playfields );
+
+    }
+    else if( _message.startsWith( "pfinit:other:" )) {
+        
+        this.playfields.set( _data.playfields );
+    
+    }
+    else if( _message.startsWith( "pfselect:" )) {
+        
+        this.output.set( _data.textW, _data.textH, _data.cells );
+    
+    }    
     else if( _message == "load:error" ) {
 
       if( this.runFlag == false ) {
@@ -1406,6 +1457,7 @@ class BasicRuntime {
 
   HandleStopped( startingProgram ) {
 
+    this.clearWaiting();
     this.input.setInterActive( true);
     this.input.flush();
     if( !startingProgram && this.menuEnable ) {
@@ -2228,12 +2280,6 @@ class BasicRuntime {
 
   }
 
-  breakCycle() {
-    this.breakCycleFlag = true;
-  }
-
-
-
   cycle() {
 
     /*return values*/
@@ -2243,6 +2289,7 @@ class BasicRuntime {
     var MIDLINE_INTERUPT = 20;
     var TERMINATE_W_JUMP = 30;
     var PAUSE_F_INPUT = 40;
+    var WAIT_SPECIFIC_TIME = 50;
 
     var c = this.output;
 
@@ -2285,12 +2332,8 @@ class BasicRuntime {
 
 
           if( this.waitForMessageFlag ) {
-              return this.statusChanged;
-          }
-
-          if( this.breakCycleFlag ) {
-            this.breakCycleFlag = false;
-            break;
+              break;
+              //return this.statusChanged;
           }
 
           if(this.debugFlag) console.log("START CYCLE LOOP-------------" );
@@ -2357,7 +2400,8 @@ class BasicRuntime {
               console.log("FUNCTION DUMP:", this.functions );
             }
             if(this.debugFlag) console.log("CYCLE RETURN END");
-            return this.statusChanged;
+            //return this.statusChanged;
+            break;
           }
           else if( rv[0] == LINE_FINISHED ) {
             this.runPointer ++;
@@ -2389,6 +2433,13 @@ class BasicRuntime {
 
             this.runPointer2 = af;
             if(this.debugFlag) console.log("CYCLE PAUSE 4 INPUT" + this.runPointer + "," + this.runPointer2);
+            break;
+
+          }
+          else if( rv[0] == WAIT_SPECIFIC_TIME ) {
+
+            this.runPointer2 = af;
+            if(this.debugFlag) console.log("CYCLE PAUSE 4 SPECIFIC TIME" + this.runPointer + "," + this.runPointer2);
             break;
 
           }
@@ -2457,7 +2508,15 @@ class BasicRuntime {
 
     }
 
-    return this.statusChanged;
+    var pi = this.procIf;
+
+    var cstate = pi.STATE_CLI;
+
+    if( this.isWaitingFlag  ) { cstate = pi.STATE_WAITING ;}
+    else if( this.inputFlag  ) { cstate = pi.STATE_INPUT ;}
+    else if( this.runFlag | this.listFlag ) { cstate = pi.STATE_RUNNING; }
+
+    return [ this.statusChanged, cstate, this.waitingTime ];
   }
 
   doReturn() {
@@ -3129,6 +3188,8 @@ class BasicRuntime {
     if( this.program.length > 0) {
       this.runFlag = true;
       this.inputFlag = false;
+      this.waitingTime = 0;
+      this.isWaitingFlag = false;
       this.runPointer = 0;
       this.runPointer2 = 0;
       this.waitForMessageFlag = false;
@@ -3139,6 +3200,8 @@ class BasicRuntime {
     else {
       this.runFlag = false;
       this.inputFlag = false;
+      this.waitingTime = 0;
+      this.isWaitingFlag = false;
       this.runPointer = 0;
       this.runPointer2 = 0;
       this.waitForMessageFlag = false;
@@ -3299,6 +3362,7 @@ class BasicRuntime {
     var MIDLINE_INTERUPT = 20;
     var TERMINATE_W_JUMP = 30;
     var PAUSE_F_INPUT = 40;
+    var WAIT_SPECIFIC_TIME = 50;
 
     var end = cmds.length;
     var i=this.runPointer2;
@@ -3311,31 +3375,17 @@ class BasicRuntime {
       limit = 9999; //reaching to infinite (max on line maybe  40)
     }
 
-
-
     while( i<end && cnt<limit ) {
 
-
-      if( this.breakCycleFlag ) {
-        if(!(limit == undefined )) {
-          this.breakCycleFlag = false;
-          break;
-        }
-      }
 
       var cmd=cmds[i];
 
       var l=this.program[this.runPointer];
       if( l ) {
-        //console.log( l[0] );
         if(parseInt(l[0]) == 3155 ) {
           console.log("bump");
         }
       }
-      //if( this.runPointer > -1 ) {
-      //  console.log( l[0] + "(" + this.runPointer + ":" + i +")" + this.commandToString( cmd ) );
-      //}
-      //console.log( cmd.lineNumber + ":" + cmd.type + ":" + (cmd.controlKW ? cmd.controlKW : cmd.statementName ));
 
       if( cmd.type == "control" )  {
         var cn = cmd.controlKW;
@@ -3552,9 +3602,16 @@ class BasicRuntime {
             return [END_W_ERROR,i+1,cnt+1];
           }
           else {
+
+              this.inputCommand  = false;
+
               mycommands[ "_stat_" + cmd.statementName.toLowerCase()]( values );
-              if( this.inputFlag ) {
+
+              if( this.inputFlag ) {  //}|| this.inputCommand ) {
                 return [PAUSE_F_INPUT,i+1,cnt+1];
+              }
+              else if ( this.isWaitingFlag )  {
+                return [WAIT_SPECIFIC_TIME,i+1,cnt+1];
               }
           }
 
@@ -3581,13 +3638,14 @@ class BasicRuntime {
         if( cmd.arrayAssignment ) {
           var varIntName = "@array_" + cmd.var;
           if( this.vars[ varIntName ] === undefined ) {
-            this.printError("bad subscript");
+            this.printError("bad subscript",false, false, "No such Array");
+            //printError( s, supressLine, explicitline, detail ) {
             return [END_W_ERROR,i+1,cnt];
           }
 
           var arr = this.vars[ varIntName ];
           if( cmd.indices.length != arr.getIndexCount() ) {
-            this.printError("bad subscript");
+            this.printError("bad subscript",false, false, "Wrong dimensions");
             return [END_W_ERROR,i+1,cnt];
           }
 
@@ -3991,6 +4049,7 @@ class ExtendedCommands {
   constructor( basicCmds, runtime ) {
     this.output = runtime.output;
     this.bitmap = runtime.bitmap;
+    this.playfields = runtime.playfields;
     this.audio = runtime.audio;
     this.html = runtime.html;
     this.input = runtime.input;
@@ -4440,7 +4499,7 @@ class ExtendedCommands {
 
     if( pars.length == 1) {
         var col = Math.round( pars[0].value );
-        if( col > 0 && col < 16) {
+        if( col > 0 && col < 32) {
             this.bitmap.setLineColor(  col );
         }
         return
@@ -4448,7 +4507,25 @@ class ExtendedCommands {
 
   }
 
+  _stat_info_fcolor() { return "graphics:Set graphics fill color index:<Color Index>"; }
+  _stat_fcolor( pars ) {
 
+    var result;
+
+    if( pars.length != 1) {
+      this.erh.throwError( "parameter count", "expected color" );
+      return
+    }
+
+    if( pars.length == 1) {
+        var col = Math.round( pars[0].value );
+        if( col > 0 && col < 32) {
+            this.bitmap.setFillColor(  col );
+        }
+        return
+    }
+
+  }
 
   _stat_info_origin() { return "graphics:Specify origin of graphics console:<X0>,<Y0>,<Dx>,<Dy>"; }
   _stat_origin( pars ) {
@@ -4483,8 +4560,8 @@ class ExtendedCommands {
 
   _stat_info_line() { return "graphics:Draw a line:<X0>,<Y0>,<X1>,<Y1>"; }
   _stat_line( pars ) {
-    if( pars.length != 4 ) {
-      this.erh.throwError( "parameter count", "expected 2 (x0,y0,y1,y1), not " + pars.length );
+    if( pars.length != 4 && pars.length != 2 ) {
+      this.erh.throwError( "parameter count", "expected 2 or 4 ([x0,y0,] y1,y1), not " + pars.length );
       return;
     }
 
@@ -4493,7 +4570,38 @@ class ExtendedCommands {
       return;
     }
 
+    if( pars.length == 2 ) {
+
+      this.bitmap.line(
+        undefined, undefined,
+        pars[0].value,
+        pars[1].value
+      );
+      return;
+    }
+
     this.bitmap.line(
+      pars[0].value,
+      pars[1].value,
+      pars[2].value,
+      pars[3].value
+
+    );
+  }
+
+  _stat_info_box() { return "graphics:Draw a filled rectangle:<X>,<Y>,<W>,<H>"; }
+  _stat_box( pars ) {
+    if( pars.length != 4 ) {
+      this.erh.throwError( "parameter count", "expected 4 (x,y,w,h), not " + pars.length );
+      return;
+    }
+
+    if( !this.bitmap.isActive() ) {
+      this.erh.throwError( "invalid display mode", "current mode cannot show graphics" );
+      return;
+    }
+
+    this.bitmap.fillRect(
       pars[0].value,
       pars[1].value,
       pars[2].value,
@@ -4517,23 +4625,87 @@ class ExtendedCommands {
     this.bitmap.plot( pars[0].value, pars[1].value );
   }
 
-  _stat_info_center() { return "print:Print horizontal center:<StringToPrint>"; }
+  
+_if_center() {
+    var EXPR = 0, PAR = 1, RAW=2;
+    return [RAW];
+}
+
+isNumber(value) {
+  return typeof value === 'number' && isFinite(value);
+}
+
+normalizeIfNumber( x )  {
+  if( this.isNumber( x ) ) {
+    if ( x >= 0 ) {
+      return " " + x;
+    }
+  }
+  return "" + x;
+}
+
+
+  _stat_info_center() { return "print:Print center text or values to the console:<Value>[;<Value>][;]"; }
   _stat_center( pars ) {
 
-    var string;
-
-    if( pars.length > 1 ) {
-      this.erh.throwError( "too many parameters", "expected max 2, not " + pars.length );
-      return;
-    }
+    var runtime = this.runtime;
+    var con= this.output;
 
     if( pars.length == 0 ) {
+      con.nl();
       return;
     }
+    else if( pars.length == 1 ) {
+      if( pars[0].parts.length == 0 ) {
+        con.nl();
+        return;
+      }
+    }
 
-    string = pars[0].value;
+    var newLine = true;
+    var value;
+    for( var i=0; i<pars.length; i++) {
 
-    this.output.center( string );
+      newLine = true;
+      if( i<(pars.length-1)) {
+        newLine = false;
+      }
+
+      if( i>0) {
+        con.write( "         " );
+      }
+
+      var exparts = pars[i];
+      var exparts2=
+        { parts: [],
+          binaryNegate: exparts.binaryNegate,
+          negate: exparts.negate  };
+
+      for( var j=0; j<exparts.parts.length; j++) {
+        if( exparts.parts[j].type == "uniop" &&
+            exparts.parts[j].op == ";" && j==(exparts.parts.length-1)
+            && (i == pars.length-1)) {
+              //console.log( "i="+i+" newline: set to false");
+          newLine = false;
+        }
+        else {
+          exparts2.parts.push( exparts.parts[j] );
+        }
+      }
+
+      value = runtime.evalExpression( exparts2 );
+
+      if( i == 0) {
+        //this.output.center( string, inhibitNL );
+        con.center( this.normalizeIfNumber( value ), true );
+      }
+      else {
+        con.center( "" + value , true);
+      }
+      if( newLine ) { con.nl(); runtime.setWaiting( 1 ); }
+
+    }
+
   }
 
 
@@ -4627,10 +4799,160 @@ class ExtendedCommands {
     this.output.pokecl( pars[0].value, pars[1].value, undefined, pars[2].value );
   }
 
+
+  _int_checkPlayfieldNo( no ) {
+
+    if( no != 0 && 
+        no != 1 &&
+        no != 2 &&
+        no != 3 &&
+        no != 4 &&
+        no != 5 
+         ) {
+      this.erh.throwError( "parameters", "Value must be 0,1,2,3,4 or 5" );
+      return;
+    }
+  }
+
+
+
+ _stat_info_pfinit() { 
+      return  "playfield:(re)Initialize of playfield buffer: <pfIndex>, <Cols>, <Rows>"; 
+    }
+
+  _stat_pfinit( pars ) {
+
+    if( !this.playfields.enabled() ) {
+      this.erh.throwError( "invalid display mode", "current mode does not have playfields" );
+      return;
+    }
+
+    if( pars.length != 3 ) {
+      this.erh.throwError( "parameters", "expected 3 parameters, not " + pars.length );
+      return;
+    }
+
+    this._int_checkPlayfieldNo( pars[0].value );
+
+    this.playfields.init( 
+        this.runtime.processId,
+        pars[0].value, 
+        0,0, 
+        pars[1].value, pars[2].value,
+        pars[1].value, pars[2].value 
+    );
+
+    this.runtime.startWaitForMessage( "pfinit" )
+  }
+
+  _stat_info_playfield() { return "playfield:Select current playfield:<Nr> ; 0 to 3"; }
+  _stat_playfield( pars ) {
+
+    if( !this.playfields.enabled() ) {
+      this.erh.throwError( "invalid display mode", "current mode does not have playfields" );
+      return;
+    }
+
+    if( pars.length != 1 ) {
+      this.erh.throwError( "parameters", "expected 1 parameter, not " + pars.length );
+      return;
+    }
+
+    this._int_checkPlayfieldNo( pars[0].value );
+
+    this.playfields.select( 
+              this.runtime.processId,
+              pars[0].value );
+    this.runtime.startWaitForMessage( "pfselect" );
+  }
+
+  _stat_info_pfscroll() { 
+      return  "playfield:Set scroll pos of playfield view: <pfIndex>, <sX>, <sY>"; 
+    }
+
+  _stat_pfscroll( pars ) {
+
+    if( !this.playfields.enabled() ) {
+      this.erh.throwError( "invalid display mode", "current mode does not have playfields" );
+      return;
+    }
+
+    if( pars.length != 3 ) {
+      this.erh.throwError( "parameters", "expected 3 parameters, not " + pars.length );
+      return;
+    }
+
+    this._int_checkPlayfieldNo( pars[0].value );
+
+    this.playfields.scrollpos( 
+        this.runtime.processId,
+        pars[0].value, 
+        pars[1].value, pars[2].value
+    );
+
+  }
+
+  _stat_info_pfview() { 
+      return  "playfield:Initialize size of playfield view: <pfIndex>, <X>, <Y>, <W>, <H>"; 
+    }
+
+  _stat_pfview( pars ) {
+
+    if( !this.playfields.enabled() ) {
+      this.erh.throwError( "invalid display mode", "current mode does not have playfields" );
+      return;
+    }
+
+    if( pars.length != 5 ) {
+      this.erh.throwError( "parameters", "expected 5 parameters, not " + pars.length );
+      return;
+    }
+
+    this._int_checkPlayfieldNo( pars[0].value );
+
+    this.playfields.viewdefine( 
+        this.runtime.processId,
+        pars[0].value, 
+        pars[1].value, pars[2].value,
+        pars[3].value, pars[4].value
+    );
+
+  }
+
+
+ 
+
+
+  _stat_info_pfenable() { 
+      return  "playfield:Enable  a playfield to be visible: <pfIndex>, <OnOfFlag>"; 
+    }
+
+  _stat_pfenable( pars ) {
+
+    if( !this.playfields.enabled() ) {
+      this.erh.throwError( "invalid display mode", "current mode does not have playfields" );
+      return;
+    }
+
+    if( pars.length != 2 ) {
+      this.erh.throwError( "parameters", "expected 2 parameters, not " + pars.length );
+      return;
+    }
+
+    this._int_checkPlayfieldNo( pars[0].value );
+
+    this.playfields.setEnable( 
+        this.runtime.processId,
+        pars[0].value, 
+        pars[1].value
+    );
+
+  }
+
   _stat_info_locate() { return "print:Set the cursor position:<Y>,<X>"; }
   _stat_locate( pars ) {
 
-    var row = -1, col = -1;
+    var row = undefined, col = undefined;
 
     if( pars.length > 2 ) {
       this.erh.throwError( "too many parameters", "expected max 2, not " + pars.length );
@@ -4815,6 +5137,22 @@ class ExtendedCommands {
     this.runtime.flagStatusChange();
     this.runtime.startWaitForMessage( "displaysize" )
 
+
+  }
+
+
+  _stat_info_gfilter() { return "experimental:Add a html filter to the display:<FilterString>"; }
+  _stat_gfilter( pars ) {
+
+    var result;
+
+    if( pars.length != 1) {
+        this.erh.throwError( "too many variables", "expected one parameter only" );
+    }
+
+    var filter = pars[0].value;
+   
+    this.output.setFilter( filter );
 
   }
 
@@ -5266,6 +5604,8 @@ class BasicCommands {
         this.runtime.setVar(p0.value, "???" );
       }
     }
+
+    this.runtime.flagInputCommand();
   }
 
   _stat_info_getkey() { return "io:Retrieve the last key pressed::<Key$>"; }
@@ -5286,6 +5626,8 @@ class BasicCommands {
         this.runtime.setVar(p0.value, k.keyLabel );
       }
     }
+
+    this.runtime.flagInputCommand();
   }
 
   _stat_info_input() { return "io:Waits for the user to type in a value::<Value>"; }
@@ -5330,7 +5672,12 @@ class BasicCommands {
     this.runtime.restoreDataPtr();
   }
 
-  _stat_info_load() { return "program:Load a program in memory:<Filename>"; }
+  _stat_info_waitms() { return "program:Wait a certain time:<MilliSeconds>"; }
+  _stat_waitms( pars ) {
+    this.runtime.setWaiting( pars[0].value );
+  }
+
+  _stat_info_load() { return "program:Load a program in memory:<FileName>"; }
   _stat_load( pars ) {
     var runtime = this.runtime;
     var result;
@@ -5601,7 +5948,7 @@ class BasicCommands {
     return "" + x;
   }
 
-  _stat_info_print() { return "print:Print text or values to the console:<Value>[<Value>;][;]"; }
+  _stat_info_print() { return "print:Print text or values to the console:<Value>[;<Value>][;]"; }
   _stat_print( pars ) {
 
     var runtime = this.runtime;
@@ -5657,7 +6004,7 @@ class BasicCommands {
       else {
         con.write( "" + value );
       }
-      if( newLine ) { con.nl(); }
+      if( newLine ) { con.nl(); runtime.setWaiting( 1 ); }
 
     }
 
@@ -6803,6 +7150,8 @@ class Parser {
     newParts = this.groupParts( expression.parts, "^" );
     newParts = this.groupParts( newParts, "/" );
     newParts = this.groupParts( newParts, "*" );
+    newParts = this.groupParts( newParts, "+" );
+    newParts = this.groupParts( newParts, "-" );
 
     var oldExpression = expression;
     expression = {
@@ -8165,77 +8514,274 @@ class processes {
 
 	constructor( sys ) {
 
+		const STATE_NULL 		= 9660;
+		const STATE_LASTSTATE = 9661;
+		const STATE_CLI = 		9670;
+		const STATE_RUNNING = 9671;
+		const STATE_INPUT 	= 9672;
+		const STATE_WAITING = 9673;
+
+		this.STATE_NULL 			= STATE_NULL;
+		this.STATE_LASTSTATE 	= STATE_LASTSTATE;
+		this.STATE_CLI 				= 		STATE_CLI;
+		this.STATE_RUNNING 		= STATE_RUNNING;
+		this.STATE_INPUT 			= STATE_INPUT;
+		this.STATE_WAITING 		= STATE_WAITING;
+
 		this.sys = sys;
 		this.processes = [];
-		this.fastProcesses = [];
-		this.fastProcessesIds = {};
-		this.count = 0;
 
 		var _this = this;
     var processes = _this.processes;
 
-		this.sys.log("Starting process interval");
+		this.idlerInterval = null;
+		this.runInterval = null;
+		this.waitTimeOut = null;
 
-		//slow loop
-		setInterval(function()  {
+		var lastState = STATE_NULL;
+		var state = STATE_NULL;
+
+		this.avgIdlerTime = 10;
+
+		var changeState = function( newState, data ) {
+
+				if( newState == STATE_INPUT ) {
+					_this.killRuntimeInterval();
+				}
+				else if( newState == STATE_WAITING ) {
+					_this.killRuntimeInterval();
+					_this.startWaitingTimeOut( data );
+				}
+				else if( newState == STATE_CLI ) {
+					_this.killRuntimeInterval();
+					_this.killWaitingTimeOut();
+				}
+				else if( newState == STATE_RUNNING ) {
+					_this.killWaitingTimeOut();
+					_this.startRuntimeInterval( data );
+				}
+
+				lastState = state;
+				state = newState;
+		}
+
+		var flags, pstate, update, wtime, p;
+
+		this.idlerFunction = function()  {
+			var m1 = new Date().getTime();
+
+			if( state == STATE_RUNNING  || state == STATE_WAITING ) {
+				return; //don't steal cycles from running or waiting timer
+			}
+
+			p = processes[0];
+
+			var running = p.cpuNeeded();
+			if( running>.1 ) { //we do not get this from cycle.  At least not in good time.
+				var stat = p.getStatus();
+				_this.sys.poststatus( 0, stat );
+
+				changeState( STATE_RUNNING, running );
+				return;
+			}
+
+			flags = p.cycle();
+
+			update = flags[ 0 ];
+			pstate = flags[ 1 ];
+			wtime = flags[ 2 ];
+
+			if( update ) {
+				var stat = p.getStatus();
+				_this.sys.poststatus( 0, stat );
+			}
+
+			if( pstate != state ) {
+				changeState( pstate, wtime );
+			}
+
+			var m2 = new Date().getTime();
+			var m3 = m2-m1;
+
+			_this.avgIdlerTime = ((_this.avgIdlerTime * 99) + m3) / 100;
+		}
+
+		this.runningFunction = function()  {
+
+			if( state != STATE_RUNNING ) {
+				return; //should never get here
+			}
+
+			//p = processes[0];
+			flags = p.cycle();
+
+			pstate = flags[ 1 ];
+			wtime = flags[ 2 ];
+
+			if( pstate != state ) {
+				changeState( pstate, wtime );
+			}
+
+		}
+
+		this.waitingFunction = function()  {
+
+			_this.runInterval = null;
+			p.clearWaiting();
+			changeState( lastState, 0 );
+
+			if( state == STATE_RUNNING ) {
+				_this.runningFunction();
+			}
+		}
+
+		changeState( STATE_CLI );
+}
+
+	startIdlerInterval()  {
+		if( this.idlerInterval == null ) {
+				 //this.sys.log("Starting process interval (first register)");
+				 this.idlerInterval = setInterval( this.idlerFunction, 200) ;
+		}
+	}
+
+	startRuntimeInterval( cpu )  {
+		if( this.runInterval == null ) {
+				 //this.sys.log("Starting running interval " + cpu);
+
+				 var iv = Math.floor( 220 - (200*cpu) );
+				 //this.sys.log("Starting running interval# " + iv);
+
+				 this.runInterval = setInterval( this.runningFunction, iv) ;
+		}
+	}
+
+	killRuntimeInterval()  {
+		if( this.runInterval != null ) {
+				 //this.sys.log("Stopping running interval");
+				 clearInterval( this.runInterval ) ;
+				 this.runInterval = null;
+		}
+	}
+
+	startWaitingTimeOut( t )  {
+		if( this.waitTimeOut == null ) {
+				 //this.sys.log("Starting waiting timeout " + t);
+				 this.waitTimeOut = setTimeout( this.waitingFunction, t, t ) ;
+		}
+	}
+
+	killWaitingTimeOut()  {
+		if( this.waitTimeOut != null ) {
+				 //this.sys.log("Stopping running wait timeout!!");
+				 clearTimeout( this.waitTimeOut ) ;
+				 this.waitTimeOut = null;
+		}
+	}
+
+/*
+
+
+		var togglerSpeedFunction = function()  {
+
+			fastloop = false;
 
 			for( var i=0; i<processes.length; i++ ) {
-				if( processes[i] ) {
+				var p = processes[i];
+				var psl = psleep[i];
 
-					var upd;
+				if( p ) {
 
-					upd = processes[ i ].cycle();
+						var cpuHungry =  processes[ i ].cpuNeeded();
+						var found = _this.fastProcesses[ i ];
+
+						if( !cpuHungry ) {
+							var debugPoint = 1;
+						}
+
+						if( cpuHungry && !found) {
+							_this.fastProcesses[ i ] = true;
+						}
+						else if( !cpuHungry && found) {
+								_this.fastProcesses[ i ] = false;
+						}
+
+						if( _this.fastProcesses[ i ] ) {
+							fastloop = true;
+						}
+					}
+				}
+		}
+
+		var cycleFunction = function()  {
+
+			var flags, upd, wait, time;
+
+			var m = null;
+
+			for( var i=0; i<processes.length; i++ ) {
+				var p = processes[i];
+				var psl = psleep[i];
+
+				if( p ) {
+
+					if( psl > 0 ) {
+
+						if( m === null ) {
+							m = new Date().getTime();
+						}
+
+						if( m<psl ) {
+							continue;
+						}
+
+						psleep[i] = 0;
+						p.clearWaiting();
+					}
+
+					flags = p.cycle();
+
+					upd = flags[ 0 ];
+					wait = flags[ 1 ];
+
+					if( wait ) {
+						var time = flags[ 2 ];
+
+						if( m === null ) {
+								var m = new Date().getTime();
+						}
+
+						psleep[i] = m + time  + 10;
+					}
+
 					if( upd ) {
 						var stat = processes[ i ].getStatus();
 						_this.sys.poststatus( i, stat );
 					}
-
-					var cpuHungry =  processes[ i ].cpuNeeded();
-					var found = !(_this.fastProcessesIds[ i + "_"] === undefined);
-
-					if( cpuHungry && !found) {
-						_this.fastProcessesIds[ i + "_"] = _this.fastProcesses.length;
-						_this.fastProcesses.push( processes[ i ] );
-					}
-					else if( !cpuHungry && found) {
-						var fpID = _this.fastProcessesIds[ i + "_"];
-						var nfpArr = [];
-						for( var j=0; j<_this.fastProcesses.length; j++ ) {
-							var el = _this.fastProcesses[ j ];
-							if( j!= fpID ) {
-								nfpArr.push( el );
-							}
-						}
-						_this.fastProcesses = nfpArr;
-						_this.fastProcessesIds[ i + "_"] = undefined;
-					}
 				}
 			}
-		}, 100);
 
-		//fast loop
-		setInterval(function()  {
-
-			for( var i=0; i<_this.fastProcesses.length; i++ ) {
-					var dummy = _this.fastProcesses[ i ].cycle();
+			if( fastloop ) {
+				setTimeout( cycleFunction, 10 );
 			}
-		}, 10);
-	}
+			else {
+				setTimeout( cycleFunction, 100 );
+			}
 
+		};
+
+
+		changeState
+
+		setInterval( togglerSpeedFunction, 100) ;
+		setTimeout( cycleFunction, 100 );
+
+
+*/
 
 
 	getTicks() {
 		return this.count;
-	}
-
-	old_register( obj ) {
-
-		var newId = this.processes.length-1;
-
-		this.processes[newId] = obj;
-		obj.processId = newId;
-
-		return newId;
 	}
 
 	get( id ) {
@@ -8247,8 +8793,14 @@ class processes {
 		var newId = this.processes.length;
 
 		this.processes.push( obj );
+		//this.processesSleep.push( 0 );
+		//this.fastProcesses.push( false );
 
 		obj.processId = newId;
+		obj.procIf = this;
+
+		this.startIdlerInterval();
+
 		return newId;
 	}
 
@@ -8295,8 +8847,13 @@ class CommandHelp {
       var si = rname.replace("_stat_","_stat_info_");
 
       var catlabel;
-      if( !( clazz[ si ] === undefined ) ) { catlabel = clazz[ si ](); }
-      else { catlabel = "general"; }
+      if( !( clazz[ si ] === undefined ) )  { 
+          catlabel = clazz[ si ](); 
+          var tmp=12;
+      }
+      else { 
+        catlabel = "general"; 
+      }
 
       var f_attribs = {};
       if( catlabel.indexOf(":") >0 ) {
@@ -8385,39 +8942,42 @@ class TextArea {
 		this.changes = { all: false, list: [] };
 		this.pokeFlush = true;
 
-
 		//this.textArea( this.cols , this.rows , -1, -1 );
 	}
 
 	isActive() {
-    return this.initialized && !this.hidden;
-  }
+    	return this.initialized && !this.hidden;
+  	}
 
 	reInit( w, h ) {
 		this._int_initMode( w, h );
 	}
 
+	set( w, h, cells ) {
+		this._int_initMode( w, h );
+		this._int_setCells( cells );
+
+	}
 
 	destroy() {
+		this.cellel = undefined;
 
-			this.cellel = undefined;
-
-			this.changes = { all: false, list: [] };
-			this.initialized = false;
-		}
+		this.changes = { all: false, list: [] };
+		this.initialized = false;
+	}
 
 
   /* Adding changes, to be posted to MT throught flush */
 	_int_addChangeAll() {
 
-		 this.changes.all = true;
-		 this.changes.list = [];
+		this.changes.all = true;
+		this.changes.list = [];
 
 	 }
 
 
 
-	 changeCount() {
+	changeCount() {
 		 if( this.changes.all ) { return 65535; }
 		 return this.changes.list.length;
 	 }
@@ -8425,69 +8985,69 @@ class TextArea {
 	/* Adding single change, to be posted to MT throught flush */
 	_int_addChange( area ) {
 
-			if(  this.changes.all ) {
-				if( this.changes.list.length > 0 ) {
-						this.changes.list = [];
-				}
-				return;
+		if(  this.changes.all ) {
+			if( this.changes.list.length > 0 ) {
+					this.changes.list = [];
 			}
+			return;
+		}
 
-			var clist = this.changes.list;
-			if( clist.length > 0 ) {
-				var lc = clist[ clist.length -1 ];
-				var nc = area;
-				if( lc.y1 == lc.y2 && nc.y1 == nc.y2 && lc.y1 == nc.y1) {
-					if( nc.x1 == lc.x2 +1 ) {
-							var x2 = lc.x2;
-							var temp=1;
-							var changesTargetArray = lc.cells[0];
-							for( var i=0; i<area.cells[0].length; i++) {
-								var cell = area.cells[0][i];
-								changesTargetArray.push( cell );
-							}
-							lc.x2 = nc.x2;
-							return;
-					}
+		var clist = this.changes.list;
+		if( clist.length > 0 ) {
+			var lc = clist[ clist.length -1 ];
+			var nc = area;
+			if( lc.y1 == lc.y2 && nc.y1 == nc.y2 && lc.y1 == nc.y1) {
+				if( nc.x1 == lc.x2 +1 ) {
+						var x2 = lc.x2;
+						var temp=1;
+						var changesTargetArray = lc.cells[0];
+						for( var i=0; i<area.cells[0].length; i++) {
+							var cell = area.cells[0][i];
+							changesTargetArray.push( cell );
+						}
+						lc.x2 = nc.x2;
+						return;
 				}
 			}
+		}
 
-		 	this.changes.list.push( area );
+		this.changes.list.push( area );
 
 	 }
 
 	 /* Force flush to MT the whole buffer */
 	_int_flushAll() {
-			this.changes.all = true;
-			this.changes.list = [];
+		this.changes.all = true;
+		this.changes.list = [];
 
-			this._int_flush();
+		this._int_flush();
+	}
 
-		}
-
-  /* Utility function to prepare input for addChange (which itself prepares for flush )*/
+  	/* Utility function to prepare input for addChange (which itself prepares for flush )*/
 	_int_getArea( x1, y1, x2, y2 ) {
-			var cells = [];
 
-			for( var y=y1; y<=y2; y++) {
-				var row = [];
-				for( var x=x1; x<=x2; x++) {
-					row.push( this.cellel[ y][ x] );
-				}
-				cells.push( row );
+	var cells = [];
+
+	for( var y=y1; y<=y2; y++) {
+			var row = [];
+			for( var x=x1; x<=x2; x++) {
+				row.push( this.cellel[ y][ x] );
 			}
-
-			var area =
-			{
-				 cells: cells,
-				 x1: x1,
-				 y1: y1,
-				 x2: x2,
-				 y2: y2
-			};
-
-			return area;
-
+			cells.push( row );
 		}
+
+		var area =
+		{
+			 cells: cells,
+			 x1: x1,
+			 y1: y1,
+			 x2: x2,
+			 y2: y2
+		};
+
+		return area;
+
+	}
 
    /* Flush local changes to Main Thread for actual display updates*/
 	 _int_flush() {
@@ -8535,38 +9095,38 @@ class TextArea {
 
 		}
 
-		attach( w, h ) {
-			this._int_initMode( w, h);
-		}
+	attach( w, h ) {
+		this._int_initMode( w, h);
+	}
 
-		setPokeFlush( flag ) {
-		  this.pokeFlush = flag;
-		}
+	setPokeFlush( flag ) {
+	  this.pokeFlush = flag;
+	}
 
 
-		peekc( x, y ) {
+	peekc( x, y ) {
 
-			var cell = this.cellel[y][x];
+		var cell = this.cellel[y][x];
      	return cell.txt.codePointAt(0);
 
+	}
+
+	peekcl( x, y, m ) {
+
+		var cell = this.cellel[y][x];
+
+		if( m== 0 ) {
+			return cell.fg;
 		}
-
-		peekcl( x, y, m ) {
-
-			var cell = this.cellel[y][x];
-
-			if( m== 0 ) {
-				return cell.fg;
-			}
-			else if( m== 1 ) {
-				return cell.bg;
-			}
-			else  {
-				return cell.fg + (16*cell.bg);
-			}
+		else if( m== 1 ) {
+			return cell.bg;
 		}
+		else  {
+			return cell.fg + (16*cell.bg);
+		}
+	}
 
-		pokec( x, y , c ) {
+	pokec( x, y , c ) {
 
 			try {
 				var cell = this.cellel[y][x];
@@ -8583,9 +9143,9 @@ class TextArea {
 				throw "Cannot pokec to adress (" + x + "," + y + ")";
 			}
 
-		}
+	}
 
-		pokecl( x, y , fg, bg ) {
+	pokecl( x, y , fg, bg ) {
 
 			try {
 				var cell = this.cellel[y][x];
@@ -8606,12 +9166,12 @@ class TextArea {
 			catch( e ) {
 				throw "Cannot pokec to adress (" + x + "," + y + ")";
 			}
-		}
+	}
 
 
-		pokeccl( x, y , c, fg, bg ) {
+	pokeccl( x, y , c, fg, bg ) {
 
-			try {
+		try {
 				var cell = this.cellel[y][x];
 
 				cell.txt = String.fromCodePoint( c );
@@ -8629,40 +9189,40 @@ class TextArea {
 					this._int_flush();
 				}
 
-			}
-			catch( e ) {
+		}
+		catch( e ) {
 				throw "Cannot pokec to adress (" + x + "," + y + ")";
-			}
 		}
+	}
 
-		triggerFlush() {
 
-			this._int_flush();
-		}
+	triggerFlush() {
 
-		_int_initMode( w, h ) {
+		this._int_flush();
+	}
 
-			if( this.initialized ) {
+
+	_int_initMode( w, h ) {
+
+		if( this.initialized ) {
 				this.destroy();
-			}
-			var sys = this.sys;
-			//var msgs = sys.init.queuedMessages; TODO, what to do with queued messages
+		}
+		var sys = this.sys;
+		//var msgs = sys.init.queuedMessages; TODO, what to do with queued messages
+		this.x = 0;
+		this.y = 0;
 
-			this.x = 0;
-			this.y = 0;
+		this.rows = h;
+		this.cols = w;
 
-			this.rows = h;
-			this.cols = w;
+		this.textArea( this.cols, this.rows, -1, -1 );
+		this.colors.txtBgColor= this.defaultBG;
+		this.colors.txtColor = this.defaultFG;
 
-			this.textArea( this.cols, this.rows, -1, -1 );
-
-			this.colors.txtBgColor= this.defaultBG;
-			this.colors.txtColor = this.defaultFG;
-
-			this.cellel = [];
-			for( var y=0; y<this.rows; y++) {
-				var rowArray = [];
-				for( var x=0; x<this.cols; x++) {
+		this.cellel = [];
+		for( var y=0; y<this.rows; y++) {
+			var rowArray = [];
+			for( var x=0; x<this.cols; x++) {
 					var cell = {
 						txt: " ",
 						fg: this.colors.txtColor,
@@ -8671,20 +9231,38 @@ class TextArea {
 					rowArray.push( cell );
 				}
 				this.cellel.push( rowArray );
+		}
+
+		this.changes = { all: true, list: [] };
+		  var _this = this;
+
+		this._int_flushAll();
+
+		this.sys.log("TEXTAREA w Ready.");
+
+		this.initialized = true;
+		this.pokeFlush = true;
+		/* if true then all pokes in "character memory" will be flushed immediately to the */
+		/*main browswer process */
+	}
+
+	_int_setCells( srcCells ) {
+
+		this.cellel = [];
+		for( var y=0; y<this.rows; y++) {
+				var rowArray = [];
+				for( var x=0; x<this.cols; x++) {
+					var cell = {
+						txt: srcCells[ y ][ x ].txt,
+						fg:  srcCells[ y ][ x ].fg,
+						bg:  srcCells[ y ][ x ].bg
+					}
+					rowArray.push( cell );
+				}
+				this.cellel.push( rowArray );
 			}
 
-			this.changes = { all: true, list: [] };
-
- 		  var _this = this;
-
-			this._int_flushAll();
-
-			this.sys.log("TEXTAREA w Ready.");
-
-			this.initialized = true;
-			this.pokeFlush = true;
-			/* if true then all pokes in "character memory" will be flushed immediately to the */
-			/*main browswer process */
+		this.changes = { all: false, list: [] };
 	}
 
 
@@ -9177,6 +9755,10 @@ class TextArea {
 	}
 
 
+	setFilter( f ) {
+		this.sys.post( "gfilter", { d: f }  );
+	}
+
 	_int_control( chr, data ) {
 
 		if( chr == 16 ) {
@@ -9226,8 +9808,9 @@ class TextArea {
 
 		if( x>=this.acols || y>= this.arows ) { throw "pos("+x+","+y+") > max" ; }
 
-		this.x = x + this.ax0;
-		this.y = y + this.ay0;
+		if( ! ( x === undefined ) ) { this.x = x + this.ax0; }
+		if( ! ( y === undefined ) ) { this.y = y + this.ay0; }
+
 
 		this._int_flush();
 	}
@@ -9248,16 +9831,18 @@ class TextArea {
 
 		if(x >= 0) {
 				this.x = x + this.ax0;
+				if( (this.x - this.ax0) >= this.acols ) { this.x = this.acols-1;}
 		}
 		if(y >= 0) {
 				this.y = y + this.ay0;
+				if( (this.y - this.ay0)>= this.arows ) { this.y = this.arows-1;}
 		}
 
-		if( this.x >= this.acols ) { this.x = this.acols-1;}
-		if( this.y >= this.arows ) { this.y = this.arows-1;}
+		
+		
 	}
 
-	center( str ) {
+	center( str, inhibitNewLine ) {
 
 			if( str.length > this.cols ) {
 				return;
@@ -9271,8 +9856,17 @@ class TextArea {
 			var x = Math.floor( (wh[0] / 2)-l2 );
 			this._int_setPos( x, -1 );
 			this._int_write( str );
-			this.__int_nl();
 
+			if( !inhibitNewLine ) {
+
+				var stat = this.__int_nl();
+				if( stat.scroll ) {
+						this._int_addChangeAll();
+						return;
+				}
+			}
+
+						
 			var area = this._int_getArea( this.ax0, this.y, this.acols-1, this.y );
 			this._int_addChange( area );
 			this._int_flush();
@@ -9319,6 +9913,139 @@ class TextArea {
 		}
 
 	}
+}
+
+//--EOC 
+
+// ## ../../rwbuffers/worker/playfields.js ==========---------- 
+// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+//  src/sys/modules/basic/worker/../../rwbuffers/worker/playfields.js
+//  BY packworkers.js -- src/sys/modules/basic/worker/../../rwbuffers/worker/playfields.js
+
+class Playfields {
+
+	constructor( sys ) {
+		this.sys = sys;
+
+		this.current = 0;
+		this.enabledFlag = false;
+		this.list = null;
+  	}
+
+  	enable( flag )  {
+  		this.enabledFlag = flag;
+  	}
+
+  	set( list )  {
+  		this.list = list;
+  	}
+
+  	enabled() {
+  		return this.enabledFlag;
+  	}
+
+  	setEnable( pid, ix, flag ) {
+		this.sys.post( "pfenable",
+			{
+				processId: pid,
+				ix: ix,
+				flag: flag
+			}  );	  		
+  	}
+
+
+	select( pid, ix ) {
+		if( ix >= this.list.length ) {
+			throw "No such playfield " + ix;
+		}
+
+		if( this.list[ ix ] == null ) {
+			throw "Playfield not active";
+		}	
+
+		this.sys.post( "pfselect",
+			{
+				processId: pid,
+				ix: ix
+			}  );		
+
+		this.current = ix;
+	}
+
+
+	scrollpos( pid, ix, x, y ) {
+		if( ix >= this.list.length ) {
+			throw "No such playfield " + ix;
+		}
+
+		if( this.list[ ix ] == null ) {
+			throw "Playfield not active";
+		}	
+
+		this.sys.post( "pfscrollpos",
+			{
+				processId: pid,
+				ix: ix,
+				x: x,
+				y: y
+			}  );		
+
+	}
+	
+
+	viewdefine( pid, ix, x, y, w, h ) {
+		if( ix >= this.list.length ) {
+			throw "No such playfield " + ix;
+		}
+
+		if( this.list[ ix ] == null ) {
+			throw "Playfield not active";
+		}	
+
+		this.sys.post( "pfviewsize",
+			{
+				processId: pid,
+				ix: ix,
+				x: x,
+				y: y,
+				w: w,
+				h: h
+			}  );		
+
+	}
+
+	init( pid, pfIx, bcwC, brhC ) {
+
+		/* If current we also need to update our 
+			worker text area buffers when done */
+
+		this.sys.post( "pfinit",
+			{
+				processId: pid,
+				ix: pfIx,
+				bcwC: bcwC, brhC: brhC,
+				fgColor: 1, bgColor: 0
+			}  );
+	}
+
+	old_init( pid, pfIx, xo, yo, cwC, rhC, bcwC, brhC ) {
+
+
+		/* If current we also need to update our 
+			worker text area buffers when done */
+
+		this.sys.post( "pfinit",
+			{
+				processId: pid,
+				ix: pfIx,
+				isCurrentIx: this.current == pfIx,
+				xo: xo, yo: yo,
+				cC: cwC, rC: rhC,
+				bcwC: bcwC, brhC: brhC,
+				fgColor: 1, bgColor: 0
+			}  );
+	}
+
 }
 
 //--EOC 
@@ -9375,7 +10102,18 @@ class BitMap {
 
   triggerFlush() {
 
-    this._int_flush();
+		if( !this.changes.flag ) {
+			return;
+		}
+
+		this.sys.post( "gfxupdate",
+			{
+				pixels: this.changes.pixels
+			}
+		);
+
+		this.changes.pixels = [];
+		this.changes.flag = false;
 
   }
 
@@ -9388,10 +10126,10 @@ class BitMap {
           pixels: this.changes.pixels
         }
       );
-    }
 
-    pixels: this.changes.pixels = [];
-    this.changes.flag = false;
+			this.changes.pixels = [];
+			this.changes.flag = false;
+    }
 
   }
 
@@ -9399,6 +10137,15 @@ class BitMap {
     this.lineColor = c;
     this.sys.post( "nativeout",{
       action: "gcolor",
+      params: { c: c }
+    });
+  }
+
+
+	setFillColor( c ) {
+    this.fillColor = c;
+    this.sys.post( "nativeout",{
+      action: "fcolor",
       params: { c: c }
     });
   }
@@ -9463,6 +10210,17 @@ class BitMap {
     this.sys.post( "nativeout",{
       action: "line",
       params: { x0:xy0[0], y0:xy0[1], x1:xy1[0], y1:xy1[1] }
+    });
+  }
+
+  fillRect( x,y, w, h ) {
+
+		var xy = this._int_convertxy( x, y );
+
+
+    this.sys.post( "nativeout",{
+      action: "fillRect",
+      params: { x:xy[0], y:xy[1], w:w, h }
     });
   }
 

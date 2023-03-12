@@ -566,7 +566,7 @@ class BasicCommands {
     return "" + x;
   }
 
-  _stat_info_print() { return "print:Print text or values to the console:<Value>[<Value>;][;]"; }
+  _stat_info_print() { return "print:Print text or values to the console:<Value>[;<Value>][;]"; }
   _stat_print( pars ) {
 
     var runtime = this.runtime;

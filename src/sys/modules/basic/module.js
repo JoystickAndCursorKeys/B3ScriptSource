@@ -158,7 +158,92 @@ class KERNALMODULE {
 
           con.gfilter( m.d );
 
-        }        
+        }
+        else if( t == "pfinit" ) {
+
+          con.pfInit( 
+              m.ix,
+              //m.xo, m.yo,
+              //m.cC, m.rC,
+              m.bcwC, m.brhC,
+              m.fgColor,
+              m.bgColor );
+
+          var changeCurrentPlayfield = m.isCurrentIx;
+          
+          //var hasPixels = con.hasPixels();
+          var playfields = con.getPlayFields();
+          
+          var wh = con.getPfBufferDimensions( m.ix );
+          var bWH = [-1,-1];
+
+
+          if( !changeCurrentPlayfield ) {
+            this.postMessage(
+              {
+              type: "message",
+              processId: m.processId,
+              message: "pfinit:other:done",
+              messageObject:
+                {
+                  pfIx: m.ix,
+                  textW: wh[0], textH: wh[1],
+                  playfields: playfields
+                }
+              }
+              );              
+          }
+          else {
+            var cells = con.getPfCells( m.ix );
+
+            this.postMessage(
+              {
+              type: "message",
+              processId: m.processId,
+              message: "pfinit:current:done",
+              messageObject:
+                {
+                  pfIx: m.ix,
+                  textW: wh[0], textH: wh[1],
+                  cells: cells,
+                  playfields: playfields
+                }
+              }
+              );              
+          }
+
+
+        }
+        else if( t == "pfselect" ) {
+
+          var wh = con.getPfBufferDimensions( m.ix );
+          var cells = con.getPfCells( m.ix );
+          con.setPlayfield( m.ix );
+
+          this.postMessage(
+              {
+              type: "message",
+              processId: m.processId,
+              message: "pfselect:done",
+              messageObject:
+                {
+                  pfIx: m.ix,
+                  textW: wh[0], textH: wh[1],
+                  cells: cells
+                }
+              }
+              );              
+        }
+        else if( t == "pfscrollpos" ) {
+          con.scrollPlayfield( m.ix, m.x, m.y );
+        }
+        else if( t == "pfenable" ) {
+          con.enablePlayfield( m.ix, m.flag );
+        }
+        else if( t == "pfviewsize" ) {
+          con.setView( m.ix, m.x, m.y, m.w, m.h );
+        }
+
         else if( t == "audio" ) {
 
           _parent.audioInit();
@@ -228,12 +313,13 @@ class KERNALMODULE {
         }
         else if( t == "displaymode" ) {
           display.setMode( m.m, _parent.menu );
-          display.cursor
+          //display.cursor
           con = display.getDriver();
           sys.out =  con;
 
           var wh = con.getDimensions();
           var hasPixels = con.hasPixels();
+          var playfields = con.getPlayFields();
           var bWH = [-1,-1];
 
           if( hasPixels ) {
@@ -243,12 +329,14 @@ class KERNALMODULE {
             {
             type: "message",
             processId: m.processId,
-            message: "displaysize:done",
+            message: "displaymode:done",
             messageObject:
               {
                 mode: m.m,
                 textW: wh[0], textH: wh[1],
                 bitmapW: bWH[0], bitmapH: bWH[1],
+                pfEnabled: playfields != null,
+                playfields: playfields 
               }
             }
             );
