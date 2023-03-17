@@ -101,6 +101,12 @@ function init_sys() {
 
   }
 
+  sys.postsynchrequest = function( procId  ) {
+
+    post("synch", { procId: procId } );
+
+  }
+
   sys.poststatus = function( procId, status  ) {
 
       post("status", { procId: procId, status: status } );
@@ -194,7 +200,11 @@ function start_sys() {
 
           runtime.receiveMessage( data.message, data.messageObject );
 
-          //TODO, index of runtime.
+        }
+        else if( data.type == "synchreply" ) {
+
+          var id = sys.processes.synch( data.processId );
+
         }
         else if( data.type == "interrupt") {
           var runtime = sys.processes.get( sys.rootProcId );
@@ -822,7 +832,10 @@ class BasicRuntime {
     this.program = [];
     this.runFlag = false;
     this.isWaitingFlag = false;
+    this.isSynchingFlag = false;
     this.waitingTime = 0;
+    this.immediate = 0; 
+    this.printWaitSynchCounter= 0;
 
     this.waitForMessageFlag = false;
     this.waitForMessageVariable = null;
@@ -959,6 +972,45 @@ class BasicRuntime {
     this.isWaitingFlag = false;
   }
 
+
+  setImmediate( immediate ) {
+    this.immediate = immediate;
+    if( this.immediate == 0 ) {
+      this.printWaitSynchCounter = 0;
+    }
+
+    this.output.setPokeFlush( immediate != 0 );
+  }
+
+
+  synchPrint() {
+    if( this.immediate == 0) {
+      this.printWaitSynchCounter++;
+      if( this.printWaitSynchCounter > 100 ) {
+        this.enableSynching(); 
+        this.printWaitSynchCounter = 0;          
+      }
+    }
+  }
+
+  printNewLine() {
+    this.output.nl();
+    if( this.immediate == 0) {
+      this.enableSynching(); 
+      this.printWaitSynchCounter = 0;
+    }
+  }
+
+  enableSynching( ) {  
+    this.isSynchingFlag = true;
+    this.synchingTime0=new Date().getTime();
+  }
+
+  clearSynching() {  
+    this.isSynchingFlag = false;
+    this.synchingTime= ( new Date().getTime() ) - this.synchingTime0;
+  }
+  
 
   getScopeVars( s ) {
     return s.vars;
@@ -2015,6 +2067,9 @@ class BasicRuntime {
             this.padZeros2(val[2]);
         }
       }
+      if(p.data.startsWith("STI")) {
+        val = this.synchingTime;
+      }      
       else if(p.data == "CURRENTLINE") {
         val = this.runPointer;
         if( val != -1 ) {
@@ -2290,6 +2345,7 @@ class BasicRuntime {
     var TERMINATE_W_JUMP = 30;
     var PAUSE_F_INPUT = 40;
     var WAIT_SPECIFIC_TIME = 50;
+    var WAIT_SYNCH = 60;
 
     var c = this.output;
 
@@ -2443,6 +2499,13 @@ class BasicRuntime {
             break;
 
           }
+          else if( rv[0] == WAIT_SYNCH ) {
+
+            this.runPointer2 = af;
+            if(this.debugFlag) console.log("CYCLE PAUSE 4 SYNCH" + this.runPointer + "," + this.runPointer2);
+            break;
+
+          }          
 
           if( cmdCount<=0 ) {
             if(this.debugFlag) console.log("Breaking cmdCount=" + cmdCount)
@@ -2513,6 +2576,7 @@ class BasicRuntime {
     var cstate = pi.STATE_CLI;
 
     if( this.isWaitingFlag  ) { cstate = pi.STATE_WAITING ;}
+    else if( this.isSynchingFlag  ) { cstate = pi.STATE_SYNCHING ;  sys.log("RT:Synch" );}
     else if( this.inputFlag  ) { cstate = pi.STATE_INPUT ;}
     else if( this.runFlag | this.listFlag ) { cstate = pi.STATE_RUNNING; }
 
@@ -3190,11 +3254,13 @@ class BasicRuntime {
       this.inputFlag = false;
       this.waitingTime = 0;
       this.isWaitingFlag = false;
+      this.isSynchingFlag = false;
       this.runPointer = 0;
       this.runPointer2 = 0;
       this.waitForMessageFlag = false;
       this.interruptFlag0 = false;
       this.interruptFlag1 = false;
+      this.setImmediate( 0 );
 
     }
     else {
@@ -3202,11 +3268,13 @@ class BasicRuntime {
       this.inputFlag = false;
       this.waitingTime = 0;
       this.isWaitingFlag = false;
+      this.isSynchingFlag = false;
       this.runPointer = 0;
       this.runPointer2 = 0;
       this.waitForMessageFlag = false;
       this.interruptFlag0 = false;
       this.interruptFlag1 = false;
+      this.setImmediate( 0 );
       this.input.setInterActive( true);
     }
 
@@ -3363,6 +3431,7 @@ class BasicRuntime {
     var TERMINATE_W_JUMP = 30;
     var PAUSE_F_INPUT = 40;
     var WAIT_SPECIFIC_TIME = 50;
+    var WAIT_SYNCH = 60;
 
     var end = cmds.length;
     var i=this.runPointer2;
@@ -3613,6 +3682,10 @@ class BasicRuntime {
               else if ( this.isWaitingFlag )  {
                 return [WAIT_SPECIFIC_TIME,i+1,cnt+1];
               }
+              else if ( this.isSynchingFlag )  {
+                return [WAIT_SYNCH,i+1,cnt+1];
+              }
+
           }
 
         }
@@ -4723,18 +4796,7 @@ normalizeIfNumber( x )  {
   }
 
 
-  _stat_info_immediate() { return "poke:Set flag to flush the render pipeline after each poke:<RenderImmediateFlag>"; }
-  _stat_immediate( pars ) {
 
-    var row = -1, col = -1;
-
-    if( pars.length != 1) {
-      this.erh.throwError( "parameters", "expected 1 parameters, not " + pars.length );
-      return;
-    }
-
-    this.output.setPokeFlush( pars[0].value != 0 );
-  }
 
 
   _stat_info_pokeccl() { return "poke:Put a character directly into the screen buffer:<Y>,<X>,<Code>,<FGColor>,<BGColor>"; }
@@ -5392,7 +5454,6 @@ class BasicCommands {
     this.func = {};
     this.statementList = null;
     this.erh = new ErrorHandler();
-
     this.keyLabelCodes = {};
 
     this.randnrs = [];
@@ -5677,6 +5738,14 @@ class BasicCommands {
     this.runtime.setWaiting( pars[0].value );
   }
 
+  _stat_info_rsynch() { return "program:Synch with the renderer thread"; }
+  _stat_rsynch( pars ) {
+    //sys.log( "CMDS.Synch" );
+    this.runtime.enableSynching();
+  }
+
+  
+
   _stat_info_load() { return "program:Load a program in memory:<FileName>"; }
   _stat_load( pars ) {
     var runtime = this.runtime;
@@ -5948,6 +6017,21 @@ class BasicCommands {
     return "" + x;
   }
 
+
+  _stat_info_immediate() { return "program:Set flag to flush the render pipeline after each print or poke:<RenderImmediateFlag>"; }
+  _stat_immediate( pars ) {
+
+    var row = -1, col = -1;
+
+    if( pars.length != 1) {
+      this.erh.throwError( "parameters", "expected 1 parameters, not " + pars.length );
+      return;
+    }
+
+    this.runtime.setImmediate( pars[0].value );
+  }
+
+
   _stat_info_print() { return "print:Print text or values to the console:<Value>[;<Value>][;]"; }
   _stat_print( pars ) {
 
@@ -5955,12 +6039,13 @@ class BasicCommands {
     var con= this.output;
 
     if( pars.length == 0 ) {
-      con.nl();
+
+      this.runtime.printNewLine();      
       return;
     }
     else if( pars.length == 1 ) {
       if( pars[0].parts.length == 0 ) {
-        con.nl();
+        this.runtime.printNewLine();  
         return;
       }
     }
@@ -6004,7 +6089,11 @@ class BasicCommands {
       else {
         con.write( "" + value );
       }
-      if( newLine ) { con.nl(); runtime.setWaiting( 1 ); }
+      if( newLine ) { 
+        this.runtime.printNewLine();  
+        return;
+      }
+      this.runtime.synchPrint();  
 
     }
 
@@ -8520,6 +8609,7 @@ class processes {
 		const STATE_RUNNING = 9671;
 		const STATE_INPUT 	= 9672;
 		const STATE_WAITING = 9673;
+		const STATE_SYNCHING = 9674;
 
 		this.STATE_NULL 			= STATE_NULL;
 		this.STATE_LASTSTATE 	= STATE_LASTSTATE;
@@ -8527,12 +8617,13 @@ class processes {
 		this.STATE_RUNNING 		= STATE_RUNNING;
 		this.STATE_INPUT 			= STATE_INPUT;
 		this.STATE_WAITING 		= STATE_WAITING;
+		this.STATE_SYNCHING 		= STATE_SYNCHING;		
 
 		this.sys = sys;
 		this.processes = [];
 
 		var _this = this;
-    var processes = _this.processes;
+    	var processes = _this.processes;
 
 		this.idlerInterval = null;
 		this.runInterval = null;
@@ -8545,24 +8636,30 @@ class processes {
 
 		var changeState = function( newState, data ) {
 
-				if( newState == STATE_INPUT ) {
-					_this.killRuntimeInterval();
-				}
-				else if( newState == STATE_WAITING ) {
-					_this.killRuntimeInterval();
-					_this.startWaitingTimeOut( data );
-				}
-				else if( newState == STATE_CLI ) {
-					_this.killRuntimeInterval();
-					_this.killWaitingTimeOut();
-				}
-				else if( newState == STATE_RUNNING ) {
-					_this.killWaitingTimeOut();
-					_this.startRuntimeInterval( data );
-				}
+			if( newState == STATE_INPUT ) {
+				_this.killRuntimeInterval();
+			}
+			else if( newState == STATE_WAITING ) {
+				_this.killRuntimeInterval();
+				_this.startWaitingTimeOut( data );
+			}
+			else if( newState == STATE_SYNCHING ) {
+				_this.killRuntimeInterval();
+				_this.killWaitingTimeOut();
+				
+				_this.sys.postsynchrequest( 0 );
+			}
+			else if( newState == STATE_CLI ) {
+				_this.killRuntimeInterval();
+				_this.killWaitingTimeOut();
+			}
+			else if( newState == STATE_RUNNING ) {
+				_this.killWaitingTimeOut();
+				_this.startRuntimeInterval( data );
+			}
 
-				lastState = state;
-				state = newState;
+			lastState = state;
+			state = newState;
 		}
 
 		var flags, pstate, update, wtime, p;
@@ -8570,8 +8667,8 @@ class processes {
 		this.idlerFunction = function()  {
 			var m1 = new Date().getTime();
 
-			if( state == STATE_RUNNING  || state == STATE_WAITING ) {
-				return; //don't steal cycles from running or waiting timer
+			if( state == STATE_RUNNING  || state == STATE_WAITING || state == STATE_SYNCHING) {
+				return; //don't steal cycles from running or waiting timer, or synching process
 			}
 
 			p = processes[0];
@@ -8603,7 +8700,7 @@ class processes {
 			var m2 = new Date().getTime();
 			var m3 = m2-m1;
 
-			_this.avgIdlerTime = ((_this.avgIdlerTime * 99) + m3) / 100;
+			_this.avgIdlerTime = ((_this.avgIdlerTime * 99) + m3) / 100; 
 		}
 
 		this.runningFunction = function()  {
@@ -8628,6 +8725,18 @@ class processes {
 
 			_this.runInterval = null;
 			p.clearWaiting();
+			changeState( lastState, 0 );
+
+			if( state == STATE_RUNNING ) {
+				_this.runningFunction();
+			}
+		}
+
+		this.synch = function( id )  {
+
+			_this.runInterval = null;
+			p.clearSynching();
+
 			changeState( lastState, 0 );
 
 			if( state == STATE_RUNNING ) {
@@ -8678,107 +8787,6 @@ class processes {
 				 this.waitTimeOut = null;
 		}
 	}
-
-/*
-
-
-		var togglerSpeedFunction = function()  {
-
-			fastloop = false;
-
-			for( var i=0; i<processes.length; i++ ) {
-				var p = processes[i];
-				var psl = psleep[i];
-
-				if( p ) {
-
-						var cpuHungry =  processes[ i ].cpuNeeded();
-						var found = _this.fastProcesses[ i ];
-
-						if( !cpuHungry ) {
-							var debugPoint = 1;
-						}
-
-						if( cpuHungry && !found) {
-							_this.fastProcesses[ i ] = true;
-						}
-						else if( !cpuHungry && found) {
-								_this.fastProcesses[ i ] = false;
-						}
-
-						if( _this.fastProcesses[ i ] ) {
-							fastloop = true;
-						}
-					}
-				}
-		}
-
-		var cycleFunction = function()  {
-
-			var flags, upd, wait, time;
-
-			var m = null;
-
-			for( var i=0; i<processes.length; i++ ) {
-				var p = processes[i];
-				var psl = psleep[i];
-
-				if( p ) {
-
-					if( psl > 0 ) {
-
-						if( m === null ) {
-							m = new Date().getTime();
-						}
-
-						if( m<psl ) {
-							continue;
-						}
-
-						psleep[i] = 0;
-						p.clearWaiting();
-					}
-
-					flags = p.cycle();
-
-					upd = flags[ 0 ];
-					wait = flags[ 1 ];
-
-					if( wait ) {
-						var time = flags[ 2 ];
-
-						if( m === null ) {
-								var m = new Date().getTime();
-						}
-
-						psleep[i] = m + time  + 10;
-					}
-
-					if( upd ) {
-						var stat = processes[ i ].getStatus();
-						_this.sys.poststatus( i, stat );
-					}
-				}
-			}
-
-			if( fastloop ) {
-				setTimeout( cycleFunction, 10 );
-			}
-			else {
-				setTimeout( cycleFunction, 100 );
-			}
-
-		};
-
-
-		changeState
-
-		setInterval( togglerSpeedFunction, 100) ;
-		setTimeout( cycleFunction, 100 );
-
-
-*/
-
 
 	getTicks() {
 		return this.count;

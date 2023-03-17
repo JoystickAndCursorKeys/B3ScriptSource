@@ -21,7 +21,10 @@ class BasicRuntime {
     this.program = [];
     this.runFlag = false;
     this.isWaitingFlag = false;
+    this.isSynchingFlag = false;
     this.waitingTime = 0;
+    this.immediate = 0; 
+    this.printWaitSynchCounter= 0;
 
     this.waitForMessageFlag = false;
     this.waitForMessageVariable = null;
@@ -158,6 +161,45 @@ class BasicRuntime {
     this.isWaitingFlag = false;
   }
 
+
+  setImmediate( immediate ) {
+    this.immediate = immediate;
+    if( this.immediate == 0 ) {
+      this.printWaitSynchCounter = 0;
+    }
+
+    this.output.setPokeFlush( immediate != 0 );
+  }
+
+
+  synchPrint() {
+    if( this.immediate == 0) {
+      this.printWaitSynchCounter++;
+      if( this.printWaitSynchCounter > 100 ) {
+        this.enableSynching(); 
+        this.printWaitSynchCounter = 0;          
+      }
+    }
+  }
+
+  printNewLine() {
+    this.output.nl();
+    if( this.immediate == 0) {
+      this.enableSynching(); 
+      this.printWaitSynchCounter = 0;
+    }
+  }
+
+  enableSynching( ) {  
+    this.isSynchingFlag = true;
+    this.synchingTime0=new Date().getTime();
+  }
+
+  clearSynching() {  
+    this.isSynchingFlag = false;
+    this.synchingTime= ( new Date().getTime() ) - this.synchingTime0;
+  }
+  
 
   getScopeVars( s ) {
     return s.vars;
@@ -1214,6 +1256,9 @@ class BasicRuntime {
             this.padZeros2(val[2]);
         }
       }
+      if(p.data.startsWith("STI")) {
+        val = this.synchingTime;
+      }      
       else if(p.data == "CURRENTLINE") {
         val = this.runPointer;
         if( val != -1 ) {
@@ -1489,6 +1534,7 @@ class BasicRuntime {
     var TERMINATE_W_JUMP = 30;
     var PAUSE_F_INPUT = 40;
     var WAIT_SPECIFIC_TIME = 50;
+    var WAIT_SYNCH = 60;
 
     var c = this.output;
 
@@ -1642,6 +1688,13 @@ class BasicRuntime {
             break;
 
           }
+          else if( rv[0] == WAIT_SYNCH ) {
+
+            this.runPointer2 = af;
+            if(this.debugFlag) console.log("CYCLE PAUSE 4 SYNCH" + this.runPointer + "," + this.runPointer2);
+            break;
+
+          }          
 
           if( cmdCount<=0 ) {
             if(this.debugFlag) console.log("Breaking cmdCount=" + cmdCount)
@@ -1712,6 +1765,7 @@ class BasicRuntime {
     var cstate = pi.STATE_CLI;
 
     if( this.isWaitingFlag  ) { cstate = pi.STATE_WAITING ;}
+    else if( this.isSynchingFlag  ) { cstate = pi.STATE_SYNCHING ;  sys.log("RT:Synch" );}
     else if( this.inputFlag  ) { cstate = pi.STATE_INPUT ;}
     else if( this.runFlag | this.listFlag ) { cstate = pi.STATE_RUNNING; }
 
@@ -2389,11 +2443,13 @@ class BasicRuntime {
       this.inputFlag = false;
       this.waitingTime = 0;
       this.isWaitingFlag = false;
+      this.isSynchingFlag = false;
       this.runPointer = 0;
       this.runPointer2 = 0;
       this.waitForMessageFlag = false;
       this.interruptFlag0 = false;
       this.interruptFlag1 = false;
+      this.setImmediate( 0 );
 
     }
     else {
@@ -2401,11 +2457,13 @@ class BasicRuntime {
       this.inputFlag = false;
       this.waitingTime = 0;
       this.isWaitingFlag = false;
+      this.isSynchingFlag = false;
       this.runPointer = 0;
       this.runPointer2 = 0;
       this.waitForMessageFlag = false;
       this.interruptFlag0 = false;
       this.interruptFlag1 = false;
+      this.setImmediate( 0 );
       this.input.setInterActive( true);
     }
 
@@ -2562,6 +2620,7 @@ class BasicRuntime {
     var TERMINATE_W_JUMP = 30;
     var PAUSE_F_INPUT = 40;
     var WAIT_SPECIFIC_TIME = 50;
+    var WAIT_SYNCH = 60;
 
     var end = cmds.length;
     var i=this.runPointer2;
@@ -2812,6 +2871,10 @@ class BasicRuntime {
               else if ( this.isWaitingFlag )  {
                 return [WAIT_SPECIFIC_TIME,i+1,cnt+1];
               }
+              else if ( this.isSynchingFlag )  {
+                return [WAIT_SYNCH,i+1,cnt+1];
+              }
+
           }
 
         }

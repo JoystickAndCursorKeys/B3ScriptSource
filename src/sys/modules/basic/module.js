@@ -388,7 +388,15 @@ class KERNALMODULE {
           //update menu
           _parent.menu.setStatus( m.status );
         }
-
+        else if ( t == "synch" ) {
+          console.log("got synch request, send synch back");
+          _parent.worker.postMessage(
+              {
+                type: "synchreply",
+                processId: m.processId
+              }
+            );
+        }   
       }
 
       var _this = this;

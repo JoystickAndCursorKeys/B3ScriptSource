@@ -10,7 +10,6 @@ class BasicCommands {
     this.func = {};
     this.statementList = null;
     this.erh = new ErrorHandler();
-
     this.keyLabelCodes = {};
 
     this.randnrs = [];
@@ -295,6 +294,14 @@ class BasicCommands {
     this.runtime.setWaiting( pars[0].value );
   }
 
+  _stat_info_rsynch() { return "program:Synch with the renderer thread"; }
+  _stat_rsynch( pars ) {
+    //sys.log( "CMDS.Synch" );
+    this.runtime.enableSynching();
+  }
+
+  
+
   _stat_info_load() { return "program:Load a program in memory:<FileName>"; }
   _stat_load( pars ) {
     var runtime = this.runtime;
@@ -566,6 +573,21 @@ class BasicCommands {
     return "" + x;
   }
 
+
+  _stat_info_immediate() { return "program:Set flag to flush the render pipeline after each print or poke:<RenderImmediateFlag>"; }
+  _stat_immediate( pars ) {
+
+    var row = -1, col = -1;
+
+    if( pars.length != 1) {
+      this.erh.throwError( "parameters", "expected 1 parameters, not " + pars.length );
+      return;
+    }
+
+    this.runtime.setImmediate( pars[0].value );
+  }
+
+
   _stat_info_print() { return "print:Print text or values to the console:<Value>[;<Value>][;]"; }
   _stat_print( pars ) {
 
@@ -573,12 +595,13 @@ class BasicCommands {
     var con= this.output;
 
     if( pars.length == 0 ) {
-      con.nl();
+
+      this.runtime.printNewLine();      
       return;
     }
     else if( pars.length == 1 ) {
       if( pars[0].parts.length == 0 ) {
-        con.nl();
+        this.runtime.printNewLine();  
         return;
       }
     }
@@ -622,7 +645,11 @@ class BasicCommands {
       else {
         con.write( "" + value );
       }
-      if( newLine ) { con.nl(); runtime.setWaiting( 1 ); }
+      if( newLine ) { 
+        this.runtime.printNewLine();  
+        return;
+      }
+      this.runtime.synchPrint();  
 
     }
 

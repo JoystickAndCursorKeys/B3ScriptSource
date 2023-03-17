@@ -8,6 +8,7 @@ class processes {
 		const STATE_RUNNING = 9671;
 		const STATE_INPUT 	= 9672;
 		const STATE_WAITING = 9673;
+		const STATE_SYNCHING = 9674;
 
 		this.STATE_NULL 			= STATE_NULL;
 		this.STATE_LASTSTATE 	= STATE_LASTSTATE;
@@ -15,12 +16,13 @@ class processes {
 		this.STATE_RUNNING 		= STATE_RUNNING;
 		this.STATE_INPUT 			= STATE_INPUT;
 		this.STATE_WAITING 		= STATE_WAITING;
+		this.STATE_SYNCHING 		= STATE_SYNCHING;		
 
 		this.sys = sys;
 		this.processes = [];
 
 		var _this = this;
-    var processes = _this.processes;
+    	var processes = _this.processes;
 
 		this.idlerInterval = null;
 		this.runInterval = null;
@@ -33,24 +35,30 @@ class processes {
 
 		var changeState = function( newState, data ) {
 
-				if( newState == STATE_INPUT ) {
-					_this.killRuntimeInterval();
-				}
-				else if( newState == STATE_WAITING ) {
-					_this.killRuntimeInterval();
-					_this.startWaitingTimeOut( data );
-				}
-				else if( newState == STATE_CLI ) {
-					_this.killRuntimeInterval();
-					_this.killWaitingTimeOut();
-				}
-				else if( newState == STATE_RUNNING ) {
-					_this.killWaitingTimeOut();
-					_this.startRuntimeInterval( data );
-				}
+			if( newState == STATE_INPUT ) {
+				_this.killRuntimeInterval();
+			}
+			else if( newState == STATE_WAITING ) {
+				_this.killRuntimeInterval();
+				_this.startWaitingTimeOut( data );
+			}
+			else if( newState == STATE_SYNCHING ) {
+				_this.killRuntimeInterval();
+				_this.killWaitingTimeOut();
+				
+				_this.sys.postsynchrequest( 0 );
+			}
+			else if( newState == STATE_CLI ) {
+				_this.killRuntimeInterval();
+				_this.killWaitingTimeOut();
+			}
+			else if( newState == STATE_RUNNING ) {
+				_this.killWaitingTimeOut();
+				_this.startRuntimeInterval( data );
+			}
 
-				lastState = state;
-				state = newState;
+			lastState = state;
+			state = newState;
 		}
 
 		var flags, pstate, update, wtime, p;
@@ -58,8 +66,8 @@ class processes {
 		this.idlerFunction = function()  {
 			var m1 = new Date().getTime();
 
-			if( state == STATE_RUNNING  || state == STATE_WAITING ) {
-				return; //don't steal cycles from running or waiting timer
+			if( state == STATE_RUNNING  || state == STATE_WAITING || state == STATE_SYNCHING) {
+				return; //don't steal cycles from running or waiting timer, or synching process
 			}
 
 			p = processes[0];
@@ -91,7 +99,7 @@ class processes {
 			var m2 = new Date().getTime();
 			var m3 = m2-m1;
 
-			_this.avgIdlerTime = ((_this.avgIdlerTime * 99) + m3) / 100;
+			_this.avgIdlerTime = ((_this.avgIdlerTime * 99) + m3) / 100; 
 		}
 
 		this.runningFunction = function()  {
@@ -116,6 +124,18 @@ class processes {
 
 			_this.runInterval = null;
 			p.clearWaiting();
+			changeState( lastState, 0 );
+
+			if( state == STATE_RUNNING ) {
+				_this.runningFunction();
+			}
+		}
+
+		this.synch = function( id )  {
+
+			_this.runInterval = null;
+			p.clearSynching();
+
 			changeState( lastState, 0 );
 
 			if( state == STATE_RUNNING ) {
@@ -166,107 +186,6 @@ class processes {
 				 this.waitTimeOut = null;
 		}
 	}
-
-/*
-
-
-		var togglerSpeedFunction = function()  {
-
-			fastloop = false;
-
-			for( var i=0; i<processes.length; i++ ) {
-				var p = processes[i];
-				var psl = psleep[i];
-
-				if( p ) {
-
-						var cpuHungry =  processes[ i ].cpuNeeded();
-						var found = _this.fastProcesses[ i ];
-
-						if( !cpuHungry ) {
-							var debugPoint = 1;
-						}
-
-						if( cpuHungry && !found) {
-							_this.fastProcesses[ i ] = true;
-						}
-						else if( !cpuHungry && found) {
-								_this.fastProcesses[ i ] = false;
-						}
-
-						if( _this.fastProcesses[ i ] ) {
-							fastloop = true;
-						}
-					}
-				}
-		}
-
-		var cycleFunction = function()  {
-
-			var flags, upd, wait, time;
-
-			var m = null;
-
-			for( var i=0; i<processes.length; i++ ) {
-				var p = processes[i];
-				var psl = psleep[i];
-
-				if( p ) {
-
-					if( psl > 0 ) {
-
-						if( m === null ) {
-							m = new Date().getTime();
-						}
-
-						if( m<psl ) {
-							continue;
-						}
-
-						psleep[i] = 0;
-						p.clearWaiting();
-					}
-
-					flags = p.cycle();
-
-					upd = flags[ 0 ];
-					wait = flags[ 1 ];
-
-					if( wait ) {
-						var time = flags[ 2 ];
-
-						if( m === null ) {
-								var m = new Date().getTime();
-						}
-
-						psleep[i] = m + time  + 10;
-					}
-
-					if( upd ) {
-						var stat = processes[ i ].getStatus();
-						_this.sys.poststatus( i, stat );
-					}
-				}
-			}
-
-			if( fastloop ) {
-				setTimeout( cycleFunction, 10 );
-			}
-			else {
-				setTimeout( cycleFunction, 100 );
-			}
-
-		};
-
-
-		changeState
-
-		setInterval( togglerSpeedFunction, 100) ;
-		setTimeout( cycleFunction, 100 );
-
-
-*/
-
 
 	getTicks() {
 		return this.count;

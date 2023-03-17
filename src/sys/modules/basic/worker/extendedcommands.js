@@ -677,18 +677,7 @@ normalizeIfNumber( x )  {
   }
 
 
-  _stat_info_immediate() { return "poke:Set flag to flush the render pipeline after each poke:<RenderImmediateFlag>"; }
-  _stat_immediate( pars ) {
 
-    var row = -1, col = -1;
-
-    if( pars.length != 1) {
-      this.erh.throwError( "parameters", "expected 1 parameters, not " + pars.length );
-      return;
-    }
-
-    this.output.setPokeFlush( pars[0].value != 0 );
-  }
 
 
   _stat_info_pokeccl() { return "poke:Put a character directly into the screen buffer:<Y>,<X>,<Code>,<FGColor>,<BGColor>"; }

@@ -76,6 +76,12 @@ function init_sys() {
 
   }
 
+  sys.postsynchrequest = function( procId  ) {
+
+    post("synch", { procId: procId } );
+
+  }
+
   sys.poststatus = function( procId, status  ) {
 
       post("status", { procId: procId, status: status } );
@@ -169,7 +175,11 @@ function start_sys() {
 
           runtime.receiveMessage( data.message, data.messageObject );
 
-          //TODO, index of runtime.
+        }
+        else if( data.type == "synchreply" ) {
+
+          var id = sys.processes.synch( data.processId );
+
         }
         else if( data.type == "interrupt") {
           var runtime = sys.processes.get( sys.rootProcId );
