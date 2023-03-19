@@ -39,26 +39,30 @@
 326 SCHR( ilU ) = 412
 327 SCHR( idL ) = 413
 328 SCHR( idR ) = 412
-400 DIM modes$(3)
+400 DIM modes$(4)
 401 modes$(0) = "Easy"
 402 modes$(1) = "Medium"
 403 modes$(2) = "Hard"
-405 mode = 1: modeMax = 2 : topscore = 0 
+404 modes$(3) = "Very Hard"
+405 mode = 1: modeMax = 3 : topscore = 0 
 
-410 DIM StartSpeeds(3)
-412 StartSpeeds( 0 )  = 0.3
-413 StartSpeeds( 1 )  = 0.4
-414 StartSpeeds( 2 )  = 0.5
+410 DIM StartSpeeds(4)
+411 StartSpeeds( 0 )  = 0.2
+412 StartSpeeds( 1 )  = 0.3
+413 StartSpeeds( 2 )  = 0.4
+414 StartSpeeds( 3 )  = 0.5
 
-420 DIM AccelrPause(3)
-422 AccelrPause( 0 )  = 0.001
-423 AccelrPause( 1 )  = 0.005
-424 AccelrPause( 2 )  = 0.01
+420 DIM AccelrPause(4)
+421 AccelrPause( 0 )  = 0.0005
+422 AccelrPause( 1 )  = 0.001
+423 AccelrPause( 2 )  = 0.005
+424 AccelrPause( 3 )  = 0.01
 
-430 DIM Acceleration(3)
-432 Acceleration( 0 )  = 0.01
-433 Acceleration( 1 )  = 0.05
-434 Acceleration( 2 )  = 0.1
+430 DIM Acceleration(4)
+431 Acceleration( 0 )  = 0.005
+432 Acceleration( 1 )  = 0.01
+433 Acceleration( 2 )  = 0.05
+434 Acceleration( 3 )  = 0.1
 
 440 DIM XARR( TAW * TAH ): DIM YARR( TAW * TAH ) : XYAP = 0
 450 DIM titleflipcol(2)
@@ -122,7 +126,7 @@
 2052 if gameover = 1 then  COLOR  2,0 : CENTER "Game  Over": PRINT
 2053 if gameover = 1 then  COLOR  11,0 : CENTER "Score: " ; int( SC ) ; " " ; modes$( prevMode) ; " L" ; int( Level )
 2054 if gameover = 1 then  COLOR  11,0 : CENTER "Top Score ";topscore :PRINT
-2060 LOCATE 27,0: COLOR  8,0:  CENTER "  '" ; modes$( mode);"'  "
+2060 LOCATE 27,0: COLOR  8,0:  CENTER "    '" ; modes$( mode);"'    "
 2065 COLOR  8,0: CENTER "<<h>> for Help" 
 2070 COLOR  5,0:  CENTER "Press <<Space>> to Start" ;
 2100 GOSUB TITLEFX : WAITMS 50
