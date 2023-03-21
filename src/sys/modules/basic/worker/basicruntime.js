@@ -324,6 +324,13 @@ class BasicRuntime {
 
   }
 
+  download( path, start, device ) {
+    this.sys.download( this, path, device );
+    this.startWaitForMessage( "download" )
+  }
+  
+
+
   loaddata( path, type, label ) {
     this.sys.loaddata( this, path, type, label );
     this.startWaitForMessage( "loaddata" )
@@ -465,6 +472,15 @@ class BasicRuntime {
         
         this.output.set( _data.textW, _data.textH, _data.cells );
     
+    }
+    else if( _message == "download:error" ) {
+
+      if( this.runFlag == false ) {
+          this.printError("download", false, undefined, _data.reason );
+      }
+    }
+    else if( _message == "download:completed" ) {
+      //nothing
     }    
     else if( _message == "load:error" ) {
 

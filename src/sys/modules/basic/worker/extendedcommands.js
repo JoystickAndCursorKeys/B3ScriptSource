@@ -760,7 +760,7 @@ normalizeIfNumber( x )  {
 
 
  _stat_info_pfinit() { 
-      return  "playfield:(re)Initialize of playfield buffer: <pfIndex>, <Cols>, <Rows>"; 
+      return  "experimental:(re)Initialize of playfield buffer: <pfIndex>, <Cols>, <Rows>"; 
     }
 
   _stat_pfinit( pars ) {
@@ -788,7 +788,7 @@ normalizeIfNumber( x )  {
     this.runtime.startWaitForMessage( "pfinit" )
   }
 
-  _stat_info_playfield() { return "playfield:Select current playfield:<Nr> ; 0 to 3"; }
+  _stat_info_playfield() { return "experimental:Select current playfield:<Nr> ; 0 to 3"; }
   _stat_playfield( pars ) {
 
     if( !this.playfields.enabled() ) {
@@ -810,7 +810,7 @@ normalizeIfNumber( x )  {
   }
 
   _stat_info_pfscroll() { 
-      return  "playfield:Set scroll pos of playfield view: <pfIndex>, <sX>, <sY>"; 
+      return  "experimental:Set scroll pos of playfield view: <pfIndex>, <sX>, <sY>"; 
     }
 
   _stat_pfscroll( pars ) {
@@ -836,7 +836,7 @@ normalizeIfNumber( x )  {
   }
 
   _stat_info_pfview() { 
-      return  "playfield:Initialize size of playfield view: <pfIndex>, <X>, <Y>, <W>, <H>"; 
+      return  "experimental:Initialize size of playfield view: <pfIndex>, <X>, <Y>, <W>, <H>"; 
     }
 
   _stat_pfview( pars ) {
@@ -867,7 +867,7 @@ normalizeIfNumber( x )  {
 
 
   _stat_info_pfenable() { 
-      return  "playfield:Enable  a playfield to be visible: <pfIndex>, <OnOfFlag>"; 
+      return  "experimental:Enable  a playfield to be visible: <pfIndex>, <OnOfFlag>"; 
     }
 
   _stat_pfenable( pars ) {

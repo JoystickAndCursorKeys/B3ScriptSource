@@ -41,6 +41,15 @@ function init_sys() {
 
   }
 
+  sys.download = function( rt, path, device ) {
+
+    post("download", { processId: rt.processId, path:path, device: device } );
+
+  }
+
+  
+
+
   sys.loaddata = function( rt, path, type, label ) {
 
       post("loaddata", { processId: rt.processId, path:path, type: type, label: label } );

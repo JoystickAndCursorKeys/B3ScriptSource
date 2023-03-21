@@ -300,7 +300,35 @@ class BasicCommands {
     this.runtime.enableSynching();
   }
 
+
   
+  _stat_info_download() { return "program:Download any file:<FileName>[,device]"; }
+  _stat_download( pars ) {
+    var runtime = this.runtime;
+    var result;
+
+    runtime.printLine("");
+
+    if( pars.length == 0) {
+      var code = this.runtime.getProgramAsText();
+      this.sys.export( code, "disk" );
+      return;
+    }
+    else {
+      runtime.printLine("searching for \"" + pars[0].value + "\"" );
+    }
+
+    if( pars.length == 1) {
+      result = runtime.download( pars[0].value, false, -1 );
+    }
+    else if( pars.length == 2) {
+      result = runtime.download( pars[0].value, false, pars[1].value );
+    }
+
+    this.aSync = true;
+
+  }
+
 
   _stat_info_load() { return "program:Load a program in memory:<FileName>"; }
   _stat_load( pars ) {

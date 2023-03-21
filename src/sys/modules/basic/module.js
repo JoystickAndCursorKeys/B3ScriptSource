@@ -283,6 +283,9 @@ class KERNALMODULE {
         else if( t == "load" ) {
           _parent.loadAppFromProgram( this, m );
         }
+        else if( t == "download" ) {
+          _parent.downloadFile( this, m );
+        }
         else if( t == "loaddata" ) {
           _parent.loadDataFromProgram( this, m );
         }
@@ -772,6 +775,88 @@ class KERNALMODULE {
     }
     return path;
   }
+
+
+  
+  downloadFile( worker, m ) {
+
+    var sys = this.sys;
+    var path = this.devicePath( m.device, m.path );
+    try {
+      sys.log("BSYS:","Load", m.path );
+
+      sys.m.qfs.loadFile( path, { clazz: this, method: "downloadedFileFromProgram", processId: m.processId } );
+    }
+    catch ( e ) {
+      console.log ( e )
+
+      this.worker.postMessage(
+        {
+        type: "message",
+        processId: m.processId,
+        message: "download:error",
+        messageObject:
+          {
+            reason: e.message
+          }
+        }
+        );
+
+    }
+
+  }
+
+
+  downloadedFileFromProgram( path, cbMessage, response ) {
+
+    var sys = this.sys;
+    sys.log("BSYS:","Loaded", cbMessage.url );
+    //this.out.blinkMode( false );
+
+    //this.worloadAppFromProgramker.postMessage({ type: "loadpgm", pgmData: data, QPath: path });
+
+    if( response.success ) {
+      this.worker.postMessage(
+        {
+        type: "message",
+        processId: cbMessage.processId,
+        message: "download:completed",
+        }
+        );
+
+        var callback = {
+          clazz: this,
+          method: "nullHandler",
+          data: ""
+        }
+
+        var localPath = sys.m.qfs.getLPath( path );
+        if( localPath.indexOf( ".") <0 ) {
+          localPath = localPath + ".b3";
+        }
+        sys.m.qfs.saveFile("export://" + localPath, response.data, callback);
+
+        
+      }
+      else {
+        this.worker.postMessage(
+          {
+          type: "message",
+          processId: cbMessage.processId,
+          message: "download:error",
+          messageObject:
+            {
+              pgmData: null,
+              reason: response.reason
+            }
+          }
+          );
+      }
+
+  }
+
+
+
 
   loadAppFromProgram( worker, m ) {
 
