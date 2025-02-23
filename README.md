@@ -17,8 +17,13 @@ Usage:
 For more information, documentation, and how to get started,   
 please visit https://github.com/JoystickAndCursorKeys/B3Script  
 
-# License
-This project uses the MIT License, with an additional attribution and brand protection clause. If you create derivative works, please explicitly mention Dusty Murray (also known as CursorKeysRetroGames or CursorKeys Retro Games) and link back to the original repository:
-https://github.com/JoystickAndCursorKeys/B3ScriptSource
 
-See the LICENSE file for full details.
+## License
+
+This project uses the [MIT License](LICENSE), with an additional request to explicitly mention and link back to this repository in derivative works.  
+See the [LICENSE](LICENSE) file for details.
+
+As of 2025-02-23, this project explicitly uses the MIT License with attribution and brand protection clauses. Any users who previously downloaded or forked this repository may use and redistribute under these same terms.
+
+
+
